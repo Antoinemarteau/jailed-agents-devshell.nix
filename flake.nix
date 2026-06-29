@@ -71,6 +71,7 @@
                 no-new-session
                 (rw-bind (noescape "\"$AGENT_WORKDIR\"") "/workspace")
                 (set-env "CLAUDE_CONFIG_DIR" "/workspace")
+                (fwd-env "CLAUDE_CODE_OAUTH_TOKEN")
                 (add-pkg-deps agentPkgs)
             ]);
 
@@ -79,7 +80,8 @@
             #!${pkgs.bash}/bin/bash
             set -e
             : "''${AGENT_WORKDIR:?AGENT_WORKDIR must be set to the workspace path}"
-            exec ${sandboxedAgent}/bin/claude-agent "$@"
+            exec ${pkgs.sops}/bin/sops exec-env "$AGENT_WORKDIR/secrets.yaml" \
+                ${sandboxedAgent}/bin/claude-agent "$@"
         '';
     in {
         packages.${system} = {
