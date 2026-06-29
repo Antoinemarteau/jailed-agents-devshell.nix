@@ -59,18 +59,24 @@
         };
 
         agentPkgs = with pkgs; [
-            bashInteractive curl wget git which
+            claude-code curl wget git which
             ripgrep gnugrep gawk findutils
             gzip unzip gnutar diffutils jq
+            neovim
         ];
 
-        sandboxedAgent = jail "claude-agent" pkgs.claude-code
+        sandboxedAgent = jail "claude-agent"
+            (pkgs.writeScriptBin "claude-agent" ''
+                #!${pkgs.bashInteractive}/bin/bash
+                cd /workspace
+                exec ${pkgs.bashInteractive}/bin/bash "$@"
+            '')
             (with jail.combinators; [
                 network
                 time-zone
                 no-new-session
                 (rw-bind (noescape "\"$AGENT_WORKDIR\"") "/workspace")
-                (set-env "CLAUDE_CONFIG_DIR" "/workspace")
+                (set-env "CLAUDE_CONFIG_DIR" "/workspace/.claude")
                 (fwd-env "CLAUDE_CODE_OAUTH_TOKEN")
                 (add-pkg-deps agentPkgs)
             ]);
