@@ -70,6 +70,7 @@
                 time-zone
                 no-new-session
                 (rw-bind (noescape "\"$AGENT_WORKDIR\"") "/workspace")
+                (set-env "CLAUDE_CONFIG_DIR" "/workspace")
                 (add-pkg-deps agentPkgs)
             ]);
 
