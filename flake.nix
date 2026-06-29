@@ -58,6 +58,21 @@
             ];
         };
 
+        agentPkgs = with pkgs; [
+            bashInteractive curl wget git which
+            ripgrep gnugrep gawk findutils
+            gzip unzip gnutar diffutils jq
+        ];
+
+        sandboxedAgent = jail "claude-agent" pkgs.claude-code
+            (with jail.combinators; [
+                network
+                time-zone
+                no-new-session
+                (rw-bind (noescape "\"$AGENT_WORKDIR\"") "/workspace")
+                (add-pkg-deps agentPkgs)
+            ]);
+
         # Outer wrapper: validates AGENT_WORKDIR and launches the jail
         agentLauncher = pkgs.writeScriptBin "claude-agent" ''
             #!${pkgs.bash}/bin/bash
@@ -65,18 +80,6 @@
             : "''${AGENT_WORKDIR:?AGENT_WORKDIR must be set to the workspace path}"
             exec ${sandboxedAgent}/bin/claude-agent "$@"
         '';
-
-        sandboxedAgent = jail "claude-agent"
-            (pkgs.writeScriptBin "claude-agent" ''
-                #!${pkgs.bash}/bin/bash
-                exec ${pkgs.claude-code}/bin/claude "$@"
-            '')
-            (with jail.combinators; [
-                network
-                time-zone
-                no-new-session
-                (rw-bind (noescape "\"$AGENT_WORKDIR\"") "/workspace")
-            ]);
     in {
         packages.${system} = {
             default = agentLauncher;
