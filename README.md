@@ -21,36 +21,26 @@ agent can be given full privilege.
    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_agent -C "agent"
    ```
 
-2. Create the main directory where you will put your different projects (called
-   `WORKSPACE` here). Generate a [long life Claude
-   token](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token),
-   if you don't have one:
-   ```bash
-   claude setup-token
-   ```
-
-3. Create a `.sops.yaml` in your project root with your SSH public key:
+2. Create the a `WORKSPACE/` directory to put Claude settings and secrets.
+   Create a `.sops.yaml` in your `WORKSPACE/` directory with your SSH public
+   key:
    ```yaml
    keys:
      - &agentkey ssh-ed25519 AAAA...your-agent-ssh-public-key... # cat ~/.ssh/id_ed25519_agent.pub
    creation_rules:
-     - path_regex: secrets\.yaml
+     - path_regex: \.credentials\.json
        key_groups:
          - age:
            - *agentkey
    ```
-   Create a secrets file at the root
+
+3. Encrypt your credentials to connect to Claude from where `.sops.yaml` is:
    ```bash
-   sops WORKSPACE/secrets.yaml
-   # or, if you don't have sops installed
-   nix-shell -p sops --run "export SOPS_AGE_SSH_PRIVATE_KEY_FILE=\"YOUR_HOME/.ssh/id_ed25519_agent\"; sops secrets.yaml"
+   WORKSPACE$ sops -e ~/.claude/.credentials.json > credentials.enc.json
    ```
-   and the Claude token in it as follows:
-   ```yaml
-   CLAUDE_CODE_OAUTH_TOKEN: your-token-here
-   ```
-   If your SSH key has a passphrase, sops will prompt for it. This `secrets.yaml`
-   file is encrypted by the ssh key, and can safely be put in a git repository.
+   If your SSH key has a passphrase, sops will prompt for it. This assumes that
+   you have connected `claude` before so that `.credentials.json` exists. The
+   encrypted `credentials.enc.json` can safely be put in a git repository.
 
 ## Usage
 

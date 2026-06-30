@@ -24,7 +24,28 @@
                 "claude-code"
             ];
         };
-        jail = jail-nix.lib.init pkgs;
+        # Override base permissions to omit --tmpfs ~ (the default mounts a
+        # tmpfs at the host user's home, which would create a spurious
+        # /home/<username> directory alongside our /home/agent bind mount).
+        jail = jail-nix.lib.extend {
+            inherit pkgs;
+            basePermissions = combinators: with combinators; [
+                (compose [
+                    (unsafe-add-raw-args "--proc /proc")
+                    (unsafe-add-raw-args "--dev /dev")
+                    (unsafe-add-raw-args "--tmpfs /tmp")
+                    (ro-bind "${pkgs.bash}/bin/sh" "/bin/sh")
+                    (add-path "/bin")
+                    (add-pkg-deps [ pkgs.coreutils pkgs.bash ])
+                    (unsafe-add-raw-args "--clearenv")
+                    (fwd-env "LANG")
+                    (fwd-env "HOME")
+                    (fwd-env "TERM")
+                ])
+                bind-nix-store-runtime-closure
+                fake-passwd
+            ];
+        };
 
         # Home-manager configuration for the agent user
         agentHome = home-manager.lib.homeManagerConfiguration {
@@ -46,6 +67,18 @@
                         enableNVIDIA = false;
                     };
 
+                    programs.zsh = {
+                        enable = true;
+                        autosuggestion.enable = true;
+                        enableCompletion = true;
+                        syntaxHighlighting.enable = true;
+                        oh-my-zsh = {
+                            enable = true;
+                            plugins = [ "git" ];
+                            theme = "agnoster";
+                        };
+                    };
+
                     home.packages = with pkgs; [
                         bashInteractive
                         curl
@@ -59,7 +92,7 @@
         };
 
         agentPkgs = with pkgs; [
-            claude-code curl wget git which
+            claude-code gh curl wget git which
             ripgrep gnugrep gawk findutils
             gzip unzip gnutar diffutils jq
             neovim
@@ -67,18 +100,22 @@
 
         sandboxedAgent = jail "claude-agent"
             (pkgs.writeScriptBin "claude-agent" ''
-                #!${pkgs.bashInteractive}/bin/bash
-                cd /workspace
-                exec ${pkgs.bashInteractive}/bin/bash "$@"
+                #!${pkgs.bash}/bin/bash
+                HOME=/home/agent USER=agent HOME_MANAGER_BACKUP_EXT=bak \
+                    ${agentHome.config.home.activationPackage}/activate 2>/dev/null || true
+                cd /home/agent/workspace
+                exec ${pkgs.zsh}/bin/zsh "$@"
             '')
             (with jail.combinators; [
                 network
                 time-zone
                 no-new-session
-                (rw-bind (noescape "\"$AGENT_WORKDIR\"") "/workspace")
-                (set-env "CLAUDE_CONFIG_DIR" "/workspace/.claude")
-                (fwd-env "CLAUDE_CODE_OAUTH_TOKEN")
+                (rw-bind (noescape "\"$(dirname \"$AGENT_WORKDIR\")/.home\"") "/home/agent")
+                (rw-bind (noescape "\"$AGENT_WORKDIR\"") "/home/agent/workspace")
+                (set-env "HOME" "/home/agent")
                 (add-pkg-deps agentPkgs)
+                (add-pkg-deps [agentHome.activationPackage])
+                (add-path "${agentHome.activationPackage}/home-path/bin")
             ]);
 
         # Outer wrapper: validates AGENT_WORKDIR and launches the jail
@@ -87,9 +124,8 @@
             set -e
             export AGENT_WORKDIR="''${AGENT_WORKDIR:-$PWD}"
             export SOPS_AGE_SSH_PRIVATE_KEY_FILE="''${SOPS_AGE_SSH_PRIVATE_KEY_FILE:-$HOME/.ssh/id_ed25519_agent}"
-            set -a
-            source <(${pkgs.sops}/bin/sops --decrypt --output-type dotenv "$AGENT_WORKDIR/secrets.yaml")
-            set +a
+            AGENT_HOME="$(dirname "$AGENT_WORKDIR")/.home"
+            mkdir -p "$AGENT_HOME/workspace"
             exec ${sandboxedAgent}/bin/claude-agent "$@"
         '';
     in {
