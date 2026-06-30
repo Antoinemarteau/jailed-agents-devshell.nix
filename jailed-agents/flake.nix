@@ -16,6 +16,7 @@
     jail = jail-nix.lib.init pkgs;
 
     # I'm using crush and opencode, but you could swap in others.
+    opencode-pkg = llm-agents.packages.${system}.opencode;
     claude-pkg = llm-agents.packages.${system}.claude-code;
 
     commonPkgs = with pkgs; [
@@ -41,25 +42,49 @@
       time-zone
       no-new-session
       mount-cwd
-      # Store claude config and session state in the project directory
-      #(set-env "CLAUDE_CONFIG_DIR" (noescape "\"$PWD/.claude\""))
+      (fwd-env "USER") # important to be able to re-use the .claude.json
     ];
 
-    makeJailedClaude = { extraPkgs ? [] }: jail "jailed-claude" claude-pkg (with jail.combinators; (
+    makeJailedShell = { extraPkgs ? [] }: jail "jailed-shell" pkgs.bashInteractive (with jail.combinators; (
       commonJailOptions ++ [
+        (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG\"") (noescape "~/.claude"))
+        (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG/.claude.json\"") (noescape "~/.claude.json"))
         (add-pkg-deps commonPkgs)
         (add-pkg-deps extraPkgs)
       ]));
+
+    makeJailedClaude = { extraPkgs ? [] }: jail "jailed-claude" claude-pkg (with jail.combinators; (
+      commonJailOptions ++ [
+        (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG\"") (noescape "~/.claude"))
+        (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG/.claude.json\"") (noescape "~/.claude.json"))
+                        #(rw-bind (noescape "\"$(dirname \"$JAILED_CLAUDE_CONFIG\")/.claude.json\"") (noescape "~/.claude.json"))
+        (add-pkg-deps commonPkgs)
+        (add-pkg-deps extraPkgs)
+      ]));
+
+    #makeJailedOpencode = { extraPkgs ? [] }: jail "jailed-opencode" opencode-pkg (with jail.combinators; (
+    #  commonJailOptions ++ [
+    #    # Give it a safe spot for its own config and cache.
+    #    # This also lets it remember things between sessions.
+    #    (readwrite (noescape "~/.config/opencode"))
+    #    (readwrite (noescape "~/.local/share/opencode"))
+    #    (readwrite (noescape "~/.local/state/opencode"))
+    #    (add-pkg-deps commonPkgs)
+    #    (add-pkg-deps extraPkgs)
+    #  ]));
 
   in
   {
     lib = {
       inherit makeJailedClaude;
+      inherit makeJailedShell;
     };
 
     devShells.default = pkgs.mkShell {
       packages = [
+        (makeJailedShell {})
         (makeJailedClaude {})
+        #(makeJailedOpencode {})
       ];
     };
   });

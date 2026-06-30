@@ -2,3 +2,10 @@ example_nix_config/
 agent_workspace/
 plan.md
 result
+/agent_workspaces/.claude/.credentials.json
+/agent_workspaces/.claude/backups/.claude.json.backup.1782804247075
+/agent_workspaces/.claude/cache/
+/agent_workspaces/.claude/plugins/
+/agent_workspaces/.claude/settings.json
+/agent_workspaces/.claude.json
+/agent_workspaces/.claude/*

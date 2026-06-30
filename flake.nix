@@ -1,83 +1,40 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    jail-nix.url = "sourcehut:~alexdavid/jail.nix";
-    llm-agents.url = "github:numtide/llm-agents.nix";
     flake-utils.url = "github:numtide/flake-utils";
+    jailed-agents.url = "path:/home/antoine/prog/ai-agent-sandboxing/jailed-agents";
   };
 
-  outputs = { nixpkgs, jail-nix, llm-agents, flake-utils, ... }:
+  outputs = { self, nixpkgs, flake-utils, jailed-agents, ... }:
   flake-utils.lib.eachDefaultSystem (system:
   let
+            #system = "x86_64-linux";
     pkgs = import nixpkgs {
       inherit system;
       config.allowUnfree = true;
     };
-    jail = jail-nix.lib.init pkgs;
-
-    opencode-pkg = llm-agents.packages.${system}.opencode;
-    claude-pkg = llm-agents.packages.${system}.claude-code;
-
-    commonPkgs = with pkgs; [
-      bashInteractive
-      curl
-      wget
-      jq
-      git
-      which
-      ripgrep
-      gnugrep
-      gawkInteractive
-      ps
-      findutils
-      gzip
-      unzip
-      gnutar
-      diffutils
-    ];
-
-    commonJailOptions = with jail.combinators; [
-      network
-      time-zone
-      no-new-session
-      mount-cwd
-    ];
-
-    makeJailedClaude = { extraPkgs ? [] }: jail "jailed-claude" claude-pkg (with jail.combinators; (
-      commonJailOptions ++ [
-        #(readwrite (noescape "~/.config/crush"))
-        #(readwrite (noescape "~/.local/share/crush"))
-
-        (add-pkg-deps commonPkgs)
-        (add-pkg-deps extraPkgs)
-      ]));
-
-    makeJailedOpencode = { extraPkgs ? [] }: jail "jailed-opencode" opencode-pkg (with jail.combinators; (
-      commonJailOptions ++ [
-        # Give it a safe spot for its own config and cache.
-        # This also lets it remember things between sessions.
-        (readwrite (noescape "~/.config/opencode"))
-        (readwrite (noescape "~/.local/share/opencode"))
-        (readwrite (noescape "~/.local/state/opencode"))
-
-        (add-pkg-deps commonPkgs)
-        (add-pkg-deps extraPkgs)
-      ]));
-
   in
   {
-    lib = {
-      inherit makeJailedOpencode;
-      inherit makeJailedClaude;
-    };
-
     devShells.default = pkgs.mkShell {
-      packages = [
-        pkgs.nixd # A little something for my editor.
+      packages = with pkgs; [
+        pkgs.nixd
+        (pkgs.writeShellScriptBin "claude" ''exec jailed-claude "$@"'')
+        (pkgs.writeShellScriptBin "bash"   ''exec jailed-bash "$@"'')
 
-        (makeJailedOpencode {})
-        (makeJailedClaude {})
+        (jailed-agents.lib.${system}.makeJailedClaude {
+          extraPkgs = [ ];
+        })
+
+        (jailed-agents.lib.${system}.makeJailedShell {
+          extraPkgs = [ claude-code ];
+        })
+
       ];
+
+      shellHook = ''
+        export JAILED_CLAUDE_CONFIG="$PWD/.claude"
+        mkdir -p "$JAILED_CLAUDE_CONFIG"
+      '';
     };
   });
 }
