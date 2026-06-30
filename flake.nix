@@ -19,7 +19,8 @@
       packages = with pkgs; [
         pkgs.nixd
         (pkgs.writeShellScriptBin "claude" ''exec jailed-claude "$@"'')
-        (pkgs.writeShellScriptBin "bash"   ''exec jailed-bash "$@"'')
+        (pkgs.writeShellScriptBin "yolo-claude" ''exec jailed-claude --dangerously-skip-permissions "$@"'')
+        (pkgs.writeShellScriptBin "jail_debuging"   ''exec jailed-bash "$@"'')
 
         (jailed-agents.lib.${system}.makeJailedClaude {
           extraPkgs = [ ];
