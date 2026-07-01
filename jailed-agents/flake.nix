@@ -42,25 +42,45 @@
       time-zone
       no-new-session
       mount-cwd
-      (fwd-env "USER") # important to be able to re-use the .claude.json
+      (fwd-env "USER") # important to be able to re-use the .claude.json, which depend on the user
     ];
 
-    makeJailedShell = { extraPkgs ? [] }: jail "jailed-shell" pkgs.bashInteractive (with jail.combinators; (
-      commonJailOptions ++ [
-        (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG\"") (noescape "~/.claude"))
-        (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG/.claude.json\"") (noescape "~/.claude.json"))
-        (add-pkg-deps commonPkgs)
-        (add-pkg-deps extraPkgs)
-      ]));
+    claudeConfigBinds = with jail.combinators; [
+      (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG\"") (noescape "~/.claude"))
+      (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG/.claude.json\"") (noescape "~/.claude.json"))
+    ];
 
-    makeJailedClaude = { extraPkgs ? [] }: jail "jailed-claude" claude-pkg (with jail.combinators; (
-      commonJailOptions ++ [
-        (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG\"") (noescape "~/.claude"))
-        (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG/.claude.json\"") (noescape "~/.claude.json"))
-                        #(rw-bind (noescape "\"$(dirname \"$JAILED_CLAUDE_CONFIG\")/.claude.json\"") (noescape "~/.claude.json"))
-        (add-pkg-deps commonPkgs)
-        (add-pkg-deps extraPkgs)
-      ]));
+    # .claude.json needs to be created within the jail to be valid, but it is
+    # linked to a temporary folder (the jail's home). This pre hook makes sure
+    # that a writable .claude.json exists both on the host and in the jail.
+    withClaudeConfigInit = { name, inner }: pkgs.writeShellScriptBin name ''
+      set -e
+      if [ -z "''${JAILED_CLAUDE_CONFIG:-}" ]; then
+        echo "${name}: JAILED_CLAUDE_CONFIG must be set" >&2
+        exit 1
+      fi
+      mkdir -p "$JAILED_CLAUDE_CONFIG"
+      touch "$JAILED_CLAUDE_CONFIG/.claude.json"
+      exec ${inner}/bin/${name}-inner "$@"
+    '';
+
+    makeJailedShell = { extraPkgs ? [] }:
+      let
+        inner = jail "jailed-shell-inner" pkgs.bashInteractive (with jail.combinators;
+          commonJailOptions ++ claudeConfigBinds ++ [
+            (add-pkg-deps commonPkgs)
+            (add-pkg-deps extraPkgs)
+          ]);
+      in withClaudeConfigInit { name = "jailed-shell"; inherit inner; };
+
+    makeJailedClaude = { extraPkgs ? [] }:
+      let
+        inner = jail "jailed-claude-inner" claude-pkg (with jail.combinators;
+          commonJailOptions ++ claudeConfigBinds ++ [
+            (add-pkg-deps commonPkgs)
+            (add-pkg-deps extraPkgs)
+          ]);
+      in withClaudeConfigInit { name = "jailed-claude"; inherit inner; };
 
     #makeJailedOpencode = { extraPkgs ? [] }: jail "jailed-opencode" opencode-pkg (with jail.combinators; (
     #  commonJailOptions ++ [

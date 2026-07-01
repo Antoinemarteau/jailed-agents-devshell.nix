@@ -145,8 +145,8 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1782810459,
-        "narHash": "sha256-t0pnxUlGjx1EHiYzXmkLhTwdX7riQvnD+t4A/LShWSc=",
+        "lastModified": 1782867044,
+        "narHash": "sha256-JSRpkiGTpWGK4N6kPxwAy1BqDMUXF+IhcTmUU3XEAf4=",
         "path": "/home/antoine/prog/ai-agent-sandboxing/jailed-agents",
         "type": "path"
       },
