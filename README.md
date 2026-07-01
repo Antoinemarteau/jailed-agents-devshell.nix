@@ -44,17 +44,25 @@ agent can be given full privilege.
 
 ## Usage
 
-Enter the dev shell once:
+Clone the repo, then from the project root start (or restart) the tmux session:
 ```bash
-nix develop github:Antoinemarteau/ai-agent-nix-sandboxing
+nix develop .
 ```
 
-This puts `jailed-claude` in your PATH. Then, from any project directory, run
-the agent — the sandbox automatically mounts your current directory as the
-agent's workspace:
+This creates a persistent `julia_agents` session on a dedicated tmux socket, with
+`jailed-claude` on PATH. From any project directory inside the session, run the
+agent — the sandbox automatically mounts your current directory as the agent's
+workspace:
 ```bash
-cd ~/myproject
-jailed-claude
+cd agent_workspaces/*myproject*
+claude      # sandboxed claude with normal permission and network access, or
+yolo-claude # sandboxed claude with --dangerously-skip-permissions, but restricted network access.
+```
+
+To re-attach later, do not use `nix develop` that kills the session and all
+existing agents, but:
+```bash
+tmux -L julia-agent-dev attach -t julia_agents
 ```
 
 ## Technical details

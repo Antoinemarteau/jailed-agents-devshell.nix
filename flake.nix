@@ -33,8 +33,20 @@
       ];
 
       shellHook = ''
-        export DEVSHELL_ROOT="$(git rev-parse --show-toplevel)/"
+        # require tmux
+        if ! command -v tmux >/dev/null 2>&1; then
+          echo "ERROR: tmux is not installed on the host — install it via your OS package manager" >&2
+          exit 1
+        fi
+
+        if [ -z "''${DEVSHELL_ROOT:-}" ]; then
+          export DEVSHELL_ROOT="$(git rev-parse --show-toplevel)/"
+        fi
         mkdir -p "$DEVSHELL_ROOT/.claude"
+
+        # Create or reset the tmux session. -L creates an independant tmux server.
+        tmux -L julia-agent-dev kill-session -t julia_agents 2>/dev/null || true
+        tmux -L julia-agent-dev new-session -s julia_agents
       '';
     };
   });
