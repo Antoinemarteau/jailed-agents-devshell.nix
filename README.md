@@ -57,4 +57,6 @@ manager](https://nixos.org/download/) (it is a "nix flake"). The user
 namespaces are created by
 [bubblewrap](https://github.com/containers/bubblewrap) via [jail.nix](https://sr.ht/~alexdavid/jail.nix/).
 
+The design is based on this [blog from Anderson. J](https://dev.to/andersonjoseph/how-i-run-llm-agents-in-a-secure-nix-sandbox-1899).
+
 Written with the help of claude-code.
