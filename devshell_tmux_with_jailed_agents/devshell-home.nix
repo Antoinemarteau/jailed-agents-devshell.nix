@@ -15,6 +15,11 @@ home-manager.lib.homeManagerConfiguration {
 
         dotDir = "${config.xdg.configHome}/zsh";
 
+        shellAliases = {
+          v   = "nvim";
+          vim = "nvim";
+        };
+
         autosuggestion.enable = true;
         enableCompletion = true;
         syntaxHighlighting.enable = true;
