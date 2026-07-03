@@ -11,7 +11,7 @@ let
     ripgrep
     gnugrep
     # gawkInteractive  # awk text processor, not required
-    # ps               # process listing, not required
+    ps              # required by Kaimon
     findutils
     # gzip          # archive tools, not required by Claude Code or Julia
     # unzip
@@ -108,6 +108,7 @@ let
         kaimonConfigWriteBinds ++
         kaimonCacheWriteBinds ++
         nixLdBinds ++ [
+          (share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (add-pkg-deps extraPkgs)
         ]);
     in withClaudeConfigInit { name = "jailed-shell"; inherit inner; };
@@ -128,6 +129,7 @@ let
         juliaDepotWriteBinds ++
         kaimonCacheWriteBinds ++
         nixLdBinds ++ [
+          (share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (add-pkg-deps extraPkgs)
         ]);
     in withJuliaInit { name = "jailed-julia"; inherit inner; };
@@ -142,6 +144,7 @@ let
         juliaDepotWriteBinds ++
         kaimonCacheWriteBinds ++
         kaimonConfigWriteBinds ++ [
+          (share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (add-pkg-deps [ julia-pkg ])
           (add-pkg-deps extraPkgs)
         ]);
