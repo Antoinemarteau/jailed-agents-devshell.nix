@@ -62,7 +62,6 @@ let
 
   withClaudeConfigInit = { name, inner }: pkgs.writeShellScriptBin name ''
     ${assertInDevshell name}
-    mkdir -p ${homeDirectory}/.claude
     # .claude.json needs to be created within the jail to be valid, but it is
     # linked to a temporary folder (the jail's home). This pre hook makes sure
     # that a writable .claude.json exists both on the host and in the jail.
@@ -72,14 +71,14 @@ let
 
   withJuliaInit = { name, inner }: pkgs.writeShellScriptBin name ''
     ${assertInDevshell name}
-    mkdir -p ${homeDirectory}/.julia
+    [ -d ${homeDirectory} ]
     mkdir -p ${homeDirectory}/.cache/kaimon/sock
     exec ${inner}/bin/${name}-inner "$@"
   '';
 
   withKaimonInit = { name, inner }: pkgs.writeShellScriptBin name ''
     ${assertInDevshell name}
-    mkdir -p ${homeDirectory}/.julia
+    [ -d ${homeDirectory} ]
     mkdir -p ${homeDirectory}/.cache/kaimon/sock
     mkdir -p ${homeDirectory}/.config/kaimon
     exec ${inner}/bin/${name}-inner "$@"

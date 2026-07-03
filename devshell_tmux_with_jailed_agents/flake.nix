@@ -55,6 +55,12 @@
       ];
 
       shellHook = ''
+        # Fail fast if devshellRoot doesn't exist — avoids silently creating directories at a wrong path.
+        if [ ! -d "${devshellRoot}" ]; then
+          echo "ERROR: devshellRoot does not exist: ${devshellRoot}" >&2
+          exit 1
+        fi
+
         # require tmux
         if ! command -v tmux >/dev/null 2>&1; then
           echo "ERROR: tmux is not installed on the host — install it via your OS package manager" >&2
@@ -68,7 +74,6 @@
         fi
 
         # Activate home-manager config into the agentshome dir (never touches real $HOME).
-        mkdir -p ${homeDirectory}
         HOME=${homeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
           ${devshellHomeManager.activationPackage}/activate
 
