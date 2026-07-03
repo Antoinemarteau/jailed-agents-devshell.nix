@@ -1,4 +1,4 @@
-ENV["PYTHON"] = "python" # For PyCall.jl / Plots
+ENV["PYTHON"] = Sys.which("python") # For PyCall.jl / Plots
 
 import Pkg as var"#Pkg"
 
