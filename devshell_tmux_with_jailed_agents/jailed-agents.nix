@@ -19,34 +19,37 @@ let
     diffutils
   ];
 
+  jailHomeDirectory = "/home/${devshellUser}";
+
   commonJailOptions = with jail.combinators; [
     network
     time-zone
     no-new-session
     mount-cwd
-    (set-env "USER" "agents")
+    (set-env "USER" devshellUser)
+    (set-env "HOME" jailHomeDirectory)
+    # read-only view of agentshome into jail's /home/agents
+    (ro-bind homeDirectory jailHomeDirectory)
     (add-pkg-deps commonPkgs)
   ];
 
-  claudeConfigBinds = with jail.combinators; [
-    (rw-bind (noescape "\"${homeDirectory}/.claude\"") (noescape "~/.claude"))
-    (rw-bind (noescape "\"${homeDirectory}/.claude/.claude.json\"") (noescape "~/.claude.json"))
+  claudeConfigWriteBinds = with jail.combinators; [
+    (rw-bind "${homeDirectory}/.claude" "${jailHomeDirectory}/.claude")
+    (rw-bind "${homeDirectory}/.claude.json" "${jailHomeDirectory}/.claude.json")
   ];
 
-  juliaDepotBinds = with jail.combinators; [
-    (rw-bind (noescape "\"${homeDirectory}/.julia\"") (noescape "~/.julia"))
+  juliaDepotWriteBinds = with jail.combinators; [
+    (rw-bind "${homeDirectory}/.julia" "${jailHomeDirectory}/.julia")
   ];
 
   # for Kaimon <-> Julia communication
-  kaimonCacheBinds = with jail.combinators; [
-    (rw-bind (noescape "\"${homeDirectory}/.cache/kaimon\"") (noescape "~/.cache/kaimon"))
+  kaimonCacheWriteBinds = with jail.combinators; [
+    (rw-bind "${homeDirectory}/.cache/kaimon" "${jailHomeDirectory}/.cache/kaimon")
   ];
 
-  kaimonConfigBinds = with jail.combinators; [
-    (rw-bind (noescape "\"${homeDirectory}/.config/kaimon\"") (noescape "~/.config/kaimon"))
+  kaimonConfigWriteBinds = with jail.combinators; [
+    (rw-bind "${homeDirectory}/.config/kaimon" "${jailHomeDirectory}/.config/kaimon")
   ];
-
-  jailHomeDirectory = "/home/${devshellUser}";
 
   # script ensuring all jailed programs are launched from within the root directory
   assertInDevshell = name: ''
@@ -67,15 +70,15 @@ let
     # .claude.json needs to be created within the jail to be valid, but it is
     # linked to a temporary folder (the jail's home). This pre hook makes sure
     # that a writable .claude.json exists both on the host and in the jail.
-    touch ${homeDirectory}/.claude/.claude.json
-    HOME=${jailHomeDirectory} exec ${inner}/bin/${name}-inner "$@"
+    touch ${homeDirectory}/.claude.json
+    exec ${inner}/bin/${name}-inner "$@"
   '';
 
   withJuliaInit = { name, inner }: pkgs.writeShellScriptBin name ''
     ${assertInDevshell name}
     [ -d ${homeDirectory} ]
     mkdir -p ${homeDirectory}/.cache/kaimon/sock
-    HOME=${jailHomeDirectory} exec ${inner}/bin/${name}-inner "$@"
+    exec ${inner}/bin/${name}-inner "$@"
   '';
 
   withKaimonInit = { name, inner }: pkgs.writeShellScriptBin name ''
@@ -83,17 +86,17 @@ let
     [ -d ${homeDirectory} ]
     mkdir -p ${homeDirectory}/.cache/kaimon/sock
     mkdir -p ${homeDirectory}/.config/kaimon
-    HOME=${jailHomeDirectory} exec ${inner}/bin/${name}-inner "$@"
+    exec ${inner}/bin/${name}-inner "$@"
   '';
 
   makeJailedShell = { extraPkgs ? [] }:
     let
       inner = jail "jailed-shell-inner" pkgs.bashInteractive (with jail.combinators;
         commonJailOptions ++
-        claudeConfigBinds ++
-        juliaDepotBinds ++
-        kaimonConfigBinds ++
-        kaimonCacheBinds ++ [
+        claudeConfigWriteBinds ++
+        juliaDepotWriteBinds ++
+        kaimonConfigWriteBinds ++
+        kaimonCacheWriteBinds ++ [
           (add-pkg-deps extraPkgs)
         ]);
     in withClaudeConfigInit { name = "jailed-shell"; inherit inner; };
@@ -101,7 +104,8 @@ let
   makeJailedClaude = { extraPkgs ? [] }:
     let
       inner = jail "jailed-claude-inner" claude-pkg (with jail.combinators;
-        commonJailOptions ++ claudeConfigBinds ++ [
+        commonJailOptions ++
+        claudeConfigWriteBinds ++ [
           (add-pkg-deps extraPkgs)
         ]);
     in withClaudeConfigInit { name = "jailed-claude"; inherit inner; };
@@ -110,8 +114,8 @@ let
     let
       inner = jail "jailed-julia-inner" julia-pkg (with jail.combinators;
         commonJailOptions ++
-        juliaDepotBinds ++
-        kaimonCacheBinds ++ [
+        juliaDepotWriteBinds ++
+        kaimonCacheWriteBinds ++ [
           (add-pkg-deps extraPkgs)
         ]);
     in withJuliaInit { name = "jailed-julia"; inherit inner; };
@@ -123,9 +127,9 @@ let
       '';
       inner = jail "jailed-kaimon-inner" kaimonLauncher (with jail.combinators;
         commonJailOptions ++
-        juliaDepotBinds ++
-        kaimonCacheBinds ++
-        kaimonConfigBinds ++ [
+        juliaDepotWriteBinds ++
+        kaimonCacheWriteBinds ++
+        kaimonConfigWriteBinds ++ [
           (add-pkg-deps [ julia-pkg ])
           (add-pkg-deps extraPkgs)
         ]);

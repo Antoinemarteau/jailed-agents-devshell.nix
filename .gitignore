@@ -3,6 +3,7 @@ plan.md
 result
 
 # Claude's config
+/agentshome/.claude.json
 /agentshome/.claude/.credentials.json
 /agentshome/.claude/backups/.claude.json.backup.1782804247075
 /agentshome/.claude/cache/
