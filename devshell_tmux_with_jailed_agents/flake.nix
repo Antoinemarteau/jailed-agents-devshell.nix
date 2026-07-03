@@ -66,7 +66,7 @@
         case "$_cwd/" in
           "${devshellRoot}/"*) ;;
           *)
-            echo "ERROR: must be run from within ${devshellRoot}" >&2
+            echo "ERROR: must be run from within devshellRoot = ${devshellRoot}, did you set it properly in flake.nix?" >&2
             echo "  current: $_cwd" >&2
             exit 1
             ;;
