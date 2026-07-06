@@ -6,6 +6,10 @@ if isnothing(Base.find_package("Revise"))
     var"#Pkg".add("Revise")
 end
 
+if isnothing(Base.find_package("TestEnv"))
+    var"#Pkg".add("TestEnv")
+end
+
 if isnothing(Base.find_package("Kaimon"))
     var"#Pkg".add("Kaimon")
 end

@@ -22,11 +22,11 @@
     # Variable required to be set to the repository root, containing the current file
     devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
     # Variables that can be optionally modified
-    devshellUser           = "agents";
-    devshellHomeFolder     = "agentshome";
-    devshellProjectsFolder = "projects";
-    tmuxServer             = "julia-agent-dev";
-    tmuxSession            = "julia_agents";
+    devshellUser           = "agents";         # username in the jail
+    devshellHomeFolder     = "agentshome";     # host dir for the jail's home
+    devshellProjectsFolder = "projects";       # host dir for the coding projects
+    tmuxServer             = "agentic-dev";    # tmux server name
+    tmuxSession            = "julia_agents";   # tmux session (suffixe)
 
     # home manager configuration for tmux, zsh, julia, etc.
     devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHomeFolder nvim-pkg; };
@@ -66,7 +66,7 @@
           exit 1
         fi
 
-        # Require running from within devshellRoot, to avoid forgeting seting devshellRoot properly
+        # Require running from within devshellRoot, to avoid forgeting setting devshellRoot properly
         _cwd="$(pwd -P)"
         case "$_cwd/" in
           "${devshellRoot}/"*) ;;
