@@ -12,6 +12,7 @@ agent can be given full privilege.
 > with no (access to) sensitive data, and commit through an independent forge
 > (Github) account using independent secrets (e.g. ssh keys).
 
+
 ## Setup
 
 Before starting, you will need to have [`nix`](https://nixos.org/download/) and
@@ -55,29 +56,36 @@ on personal machine. These are reset to default by setting 1 instead of 0.
 
 ## Usage
 
-From the root of your coding project folder (must be within
-<devshellRoot>/projects), start (or restart) the development environment:
+Create and `cd` into a project directory
+```bash
+mkdir projects/my_project
+cd projects/my_project
+```
+and clone what you need.
+
+Then, from the project folder (must be within
+`<devshellRoot>/projects`), start (or restart) the development environment:
 ```bash
 nix develop agents
 ```
 
-This creates a persistent `julia_agents` tmux session on a dedicated tmux
-socket script to launch sandboxed agents on PATH. From any project directory
-inside the session, run the agent — the sandbox automatically mounts your
-*current* directory as the agent's workspace. It is thus advised to create
-subfolders and launch the agents from there.
+This creates a tmux session with windows:
+- shell: an un-sandboxed terminal
+- claude: to run sandboxed claude-code cli
+- kaimon: automatically runs sandboxed kaimon cli
+- repl: automatically runs sandboxed julia repl serving kaimon
+. There are two options to run sandboxed claude from there:
 ```bash
-mkdir agent_workspaces/my_project
-cd agent_workspaces/my_project
 claude      # sandboxed claude with normal permission, or
 yolo-claude # sandboxed claude with --dangerously-skip-permissions
 ```
 
-To re-attach later, do not use `nix develop` that kills the session and all
-existing agents, but:
+To return to the development session later, do not use `nix develop` that kills
+the session and all existing agents, but:
 ```bash
 tmux attach <session>
 ```
+
 
 ## Technical details
 
@@ -88,4 +96,4 @@ namespaces are created by
 
 The design is based on this [blog from Anderson. J](https://dev.to/andersonjoseph/how-i-run-llm-agents-in-a-secure-nix-sandbox-1899).
 
-Written with the help of claude-code.
+Written with the help of Claude code.
