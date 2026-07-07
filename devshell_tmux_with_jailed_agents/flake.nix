@@ -97,8 +97,8 @@
           ${devshellHomeManager.activationPackage}/activate
 
         # Create or reset the tmux session. -L creates an independant tmux server.
-        tmux -L ${tmuxServer} kill-session -t "=$_session" 2>/dev/null || true
-        tmux -L ${tmuxServer} -f ${configFile."tmux/tmux.conf".source} new-session -s "$_session" -c ${devshellRoot}/${devshellProjectsFolder}
+        tmux kill-session -t "=$_session" 2>/dev/null || true
+        tmux -f ${configFile."tmux/tmux.conf".source} new-session -s "$_session" -c ${devshellRoot}/${devshellProjectsFolder}
       '';
     };
   });
