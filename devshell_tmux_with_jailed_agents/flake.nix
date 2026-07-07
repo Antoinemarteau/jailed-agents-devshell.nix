@@ -78,7 +78,6 @@
         esac
         _session="$(basename "$_cwd")"
         _session="''${_session//[^a-zA-Z0-9_-]/_}"
-        unset _cwd
 
         # require tmux
         if ! command -v tmux >/dev/null 2>&1; then
@@ -96,9 +95,17 @@
         HOME=${homeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
           ${devshellHomeManager.activationPackage}/activate
 
-        # Create or reset the tmux session. -L creates an independant tmux server.
+        # Create or reset the tmux session with its default window layout.
         tmux kill-session -t "=$_session" 2>/dev/null || true
-        tmux -f ${configFile."tmux/tmux.conf".source} new-session -s "$_session" -c ${devshellRoot}/${devshellProjectsFolder}
+        tmux -f ${configFile."tmux/tmux.conf".source} new-session -d -s "$_session" -n shell -c "$_cwd"
+        tmux new-window     -t "$_session" -n claude -c "$_cwd"
+        tmux new-window     -t "$_session" -n kaimon -c "$_cwd"
+        tmux send-keys      -t "$_session:kaimon" jailed-kaimon C-m
+        tmux new-window     -t "$_session" -n repl -c "$_cwd"
+        tmux send-keys      -t "$_session:repl" jailed-julia C-m
+        tmux select-window  -t "$_session:shell"
+        unset _cwd
+        tmux attach-session -t "$_session"
       '';
     };
   });
