@@ -22,7 +22,6 @@ let
   jailHomeDirectory = "/home/${devshellUser}";
 
   commonJailOptions = with jail.combinators; [
-    network
     time-zone
     no-new-session
     mount-cwd
@@ -99,10 +98,11 @@ let
     exec ${inner}/bin/${name}-inner "$@"
   '';
 
-  makeJailedShell = { extraPkgs ? [] }:
+  makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
     let
-      inner = jail "jailed-shell-inner" pkgs.bashInteractive (with jail.combinators;
+      inner = jail "${name}-inner" pkgs.bashInteractive (with jail.combinators;
         commonJailOptions ++
+        [ network ] ++
         claudeConfigWriteBinds ++
         juliaDepotWriteBinds ++
         kaimonConfigWriteBinds ++
@@ -111,36 +111,39 @@ let
           (share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (add-pkg-deps extraPkgs)
         ]);
-    in withClaudeConfigInit { name = "jailed-shell"; inherit inner; };
+    in withClaudeConfigInit { inherit name inner; };
 
-  makeJailedClaude = { extraPkgs ? [] }:
+  makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude" }:
     let
-      inner = jail "jailed-claude-inner" claude-pkg (with jail.combinators;
+      inner = jail "${name}-inner" claude-pkg (with jail.combinators;
         commonJailOptions ++
+        [ network ] ++
         claudeConfigWriteBinds ++ [
           (add-pkg-deps extraPkgs)
         ]);
-    in withClaudeConfigInit { name = "jailed-claude"; inherit inner; };
+    in withClaudeConfigInit { inherit name inner; };
 
-  makeJailedJulia = { extraPkgs ? [] }:
+  makeJailedJulia = { extraPkgs ? [], network ? false, name ? "jailed-julia" }:
     let
-      inner = jail "jailed-julia-inner" julia-pkg (with jail.combinators;
+      inner = jail "${name}-inner" julia-pkg (with jail.combinators;
         commonJailOptions ++
+        (if network then [ jail.combinators.network ] else []) ++
         juliaDepotWriteBinds ++
         kaimonCacheWriteBinds ++
         nixLdBinds ++ [
           (share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (add-pkg-deps extraPkgs)
         ]);
-    in withJuliaInit { name = "jailed-julia"; inherit inner; };
+    in withJuliaInit { inherit name inner; };
 
-  makeJailedKaimon = { extraPkgs ? [] }:
+  makeJailedKaimon = { extraPkgs ? [], name ? "jailed-kaimon" }:
     let
       kaimonLauncher = pkgs.writeShellScriptBin "kaimon" ''
         exec ~/.julia/bin/kaimon "$@"
       '';
-      inner = jail "jailed-kaimon-inner" kaimonLauncher (with jail.combinators;
+      inner = jail "${name}-inner" kaimonLauncher (with jail.combinators;
         commonJailOptions ++
+        [ network ] ++
         juliaDepotWriteBinds ++
         kaimonCacheWriteBinds ++
         kaimonConfigWriteBinds ++ [
@@ -148,7 +151,7 @@ let
           (add-pkg-deps [ julia-pkg ])
           (add-pkg-deps extraPkgs)
         ]);
-    in withKaimonInit { name = "jailed-kaimon"; inherit inner; };
+    in withKaimonInit { inherit name inner; };
 
 in {
   inherit makeJailedClaude makeJailedShell makeJailedJulia makeJailedKaimon;

@@ -56,6 +56,7 @@
         (jailedAgents.makeJailedClaude { })
         (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg pkgs.python3 ]; })
         (jailedAgents.makeJailedJulia { extraPkgs = [ pkgs.python3 ]; })
+        (jailedAgents.makeJailedJulia { extraPkgs = [ pkgs.python3 ]; network = true; name = "jailed-julia-net"; })
         (jailedAgents.makeJailedKaimon { })
       ];
 
