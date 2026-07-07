@@ -25,6 +25,11 @@ variable in the top-level flake.nix to the root of the git repository. This
 repository contains the `.claude/` and `.julia/` folders that will be
 given/seen by your sandboxed agents.
 
+For convenience, register the nix flake for easier new session start.
+```bash
+nix registry add agents <devshellRoot>/devshell_tmux_with_jailed_agents/
+```
+
 ### Ubuntu setup
 
 Extra steps are required on Ubuntu that by default [restricts user
@@ -50,9 +55,10 @@ on personal machine. These are reset to default by setting 1 instead of 0.
 
 ## Usage
 
-From the project root, start (or restart) the development environment:
+From the root of your coding project folder (must be within
+<devshellRoot>/projects), start (or restart) the development environment:
 ```bash
-nix develop .
+nix develop agents
 ```
 
 This creates a persistent `julia_agents` tmux session on a dedicated tmux
@@ -70,7 +76,7 @@ yolo-claude # sandboxed claude with --dangerously-skip-permissions
 To re-attach later, do not use `nix develop` that kills the session and all
 existing agents, but:
 ```bash
-tmux -L julia-agent-dev attach -t julia_agents
+tmux attach <session>
 ```
 
 ## Technical details
