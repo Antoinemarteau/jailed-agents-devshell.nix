@@ -25,8 +25,7 @@
     devshellUser           = "agents";         # username in the jail
     devshellHomeFolder     = "agentshome";     # host dir for the jail's home
     devshellProjectsFolder = "projects";       # host dir for the coding projects
-    tmuxServer             = "agentic-dev";    # tmux server name
-    tmuxSession            = "julia_agents";   # tmux session (suffixe)
+    tmuxServer             = "julia_agents";   # tmux server name
 
     # home manager configuration for tmux, zsh, julia, etc.
     devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHomeFolder nvim-pkg; };
@@ -97,16 +96,16 @@
           ${devshellHomeManager.activationPackage}/activate
 
         # Create or reset the tmux session with its default window layout.
-        tmux kill-session -t "=$_session" 2>/dev/null || true
-        tmux -f ${configFile."tmux/tmux.conf".source} new-session -d -s "$_session" -n shell -c "$_cwd"
-        tmux new-window     -t "$_session" -n claude -c "$_cwd"
-        tmux new-window     -t "$_session" -n kaimon -c "$_cwd"
-        tmux send-keys      -t "$_session:kaimon" jailed-kaimon C-m
-        tmux new-window     -t "$_session" -n repl -c "$_cwd"
-        tmux send-keys      -t "$_session:repl" jailed-julia C-m
-        tmux select-window  -t "$_session:shell"
+        tmux -L ${tmuxServer} kill-session -t "=$_session" 2>/dev/null || true
+        tmux -L ${tmuxServer} -f ${configFile."tmux/tmux.conf".source} new-session -d -s "$_session" -n shell -c "$_cwd"
+        tmux -L ${tmuxServer} new-window     -t "$_session" -n claude -c "$_cwd"
+        tmux -L ${tmuxServer} new-window     -t "$_session" -n kaimon -c "$_cwd"
+        tmux -L ${tmuxServer} send-keys      -t "$_session:kaimon" jailed-kaimon C-m
+        tmux -L ${tmuxServer} new-window     -t "$_session" -n repl -c "$_cwd"
+        tmux -L ${tmuxServer} send-keys      -t "$_session:repl" jailed-julia C-m
+        tmux -L ${tmuxServer} select-window  -t "$_session:shell"
         unset _cwd
-        tmux attach-session -t "$_session"
+        tmux -L ${tmuxServer} attach-session -t "$_session"
       '';
     };
   });
