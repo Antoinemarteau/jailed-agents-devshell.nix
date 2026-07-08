@@ -70,7 +70,7 @@
         # Require running from within devshellRoot, to avoid forgeting setting devshellRoot properly
         _cwd="$(pwd -P)"
         case "$_cwd/" in
-          "${devshellRoot}/"*) ;;
+          "${pkgs.lib.removeSuffix "/" devshellRoot}/"*) ;;
           *)
             echo "ERROR: must be run from within devshellRoot = ${devshellRoot}, did you set it properly in flake.nix?" >&2
             echo "  current: $_cwd" >&2
