@@ -47,8 +47,9 @@
       # Require running from within <devshellRoot>/projects, where the jailed agents operate.
       _projects="${devshellRoot}/${devshellProjectsFolder}"
       if [ ! -d "$_projects" ]; then
-        echo "ERROR: projects directory does not exist: $_projects" >&2
-        echo "  did you set devshellRoot properly in flake.nix?" >&2
+        echo "ERROR: devshellRoot in flake.nix is '${devshellRoot}'," >&2
+        echo "  but its projects directory ($_projects) does not exist." >&2
+        echo "  set devshellRoot to this repo's absolute path in flake.nix, then reload the env." >&2
         exit 1
       fi
       _cwd="$(pwd -P)"
@@ -121,7 +122,7 @@
           "$(${pkgs.coreutils}/bin/realpath -m "$_t")/"*)
             echo "⛔ '${name}' is disabled here: this tree is written by the sandboxed agents." >&2
             echo "   Running host '${name}' could execute agent-planted hooks/config on your host." >&2
-            echo "   Use the jailed tools, or run '${name}' from outside the sandbox after reviewing the diff." >&2
+            echo "   Use the jailed tools, or run '${name}' from inside `jailed-shell`, or from outside the sandbox after reviewing the diff." >&2
             exit 1 ;;
         esac
       done

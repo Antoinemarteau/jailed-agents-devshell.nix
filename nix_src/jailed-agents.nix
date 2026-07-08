@@ -69,6 +69,7 @@ let
       *)
         echo "${name}: must be run from within ${devshellRoot}/${devshellProjectsFolder}" >&2
         echo "  current: $_cwd" >&2
+        echo "  have you set devshellRoot in nix_src/flake.nix properly?" >&2
         exit 1
         ;;
     esac
