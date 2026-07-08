@@ -40,6 +40,107 @@
 
     jailedAgents = import ./jailed-agents.nix { inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder devshellUser homeDirectory; };
 
+    # Launch (or reset) a tmux development session for the current project. This is the
+    # explicit entry point: entering the devShell (via direnv or `nix develop`) only puts
+    # the tools on PATH — running this builds and attaches the session.
+    newAgentSession = pkgs.writeShellScriptBin "new_agent_session" ''
+      # Require running from within <devshellRoot>/projects, where the jailed agents operate.
+      _projects="${devshellRoot}/${devshellProjectsFolder}"
+      if [ ! -d "$_projects" ]; then
+        echo "ERROR: projects directory does not exist: $_projects" >&2
+        echo "  did you set devshellRoot properly in flake.nix?" >&2
+        exit 1
+      fi
+      _cwd="$(pwd -P)"
+      case "$_cwd/" in
+        "$(realpath "$_projects")/"*) ;;
+        *)
+          echo "ERROR: new_agent_session must be run from within $_projects" >&2
+          echo "  current: $_cwd" >&2
+          exit 1
+          ;;
+      esac
+      _session="$(basename "$_cwd")"
+      _session="''${_session//[^a-zA-Z0-9_-]/_}"
+
+      # require tmux
+      if ! command -v tmux >/dev/null 2>&1; then
+        echo "ERROR: tmux is not installed on the host — install it via your OS package manager" >&2
+        exit 1
+      fi
+
+      # The session windows launch jailed agents from PATH; ensure the devShell env is loaded.
+      if ! command -v jailed-kaimon >/dev/null 2>&1; then
+        echo "ERROR: devShell tools not on PATH — enter the env first (direnv, or 'nix develop ${devshellRoot}/devshell_tmux_with_jailed_agents')" >&2
+        exit 1
+      fi
+
+      # Refuse to run inside any other tmux session — new-session cannot attach when nested.
+      if [ -n "''${TMUX:-}" ]; then
+        echo "ERROR: cannot start the tmux development session within a tmux session — detach first (Ctrl-b d)" >&2
+        exit 1
+      fi
+
+      # Activate home-manager config into the agentshome dir (never touches real $HOME).
+      HOME=${homeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
+        ${devshellHomeManager.activationPackage}/activate
+
+      # Create or reset the tmux session, then apply the user-editable window
+      # layout. @proj is the project dir.
+      _layout="${tmuxSessionFile}"
+      if [ ! -f "$_layout" ]; then
+        echo "ERROR: tmux session file not found: $_layout" >&2
+        exit 1
+      fi
+      tmux -L ${tmuxServer} kill-session -t "=$_session" 2>/dev/null || true
+      tmux -L ${tmuxServer} -f ${configFile."tmux/tmux.conf".source} new-session -d -s "$_session" -c "$_cwd"
+      tmux -L ${tmuxServer} set-option  -t "$_session" @proj "$_cwd"
+      tmux -L ${tmuxServer} source-file -t "$_session:" "$_layout"
+      tmux -L ${tmuxServer} attach-session -t "$_session"
+    '';
+
+    # Directories the sandboxed agents can write to. Keep the interactive
+    # shell's own startup files (e.g. agentshome/.config/zsh) OUT of this set
+    # — they must never become agent-writable.
+    agentWritableDirs = [
+      "${devshellRoot}/${devshellProjectsFolder}"
+      "${homeDirectory}/.claude"
+      "${homeDirectory}/.julia"
+      "${homeDirectory}/.cache/kaimon"
+      "${homeDirectory}/.config/kaimon"
+    ];
+
+    # Shadow a host dev tool in agent writable directories. This is a
+    # footgun-reducer, NOT a security boundary: absolute paths (/usr/bin/git)
+    # and tools that use git without exec'ing it (libgit2, gh's internal git)
+    # bypass it.
+    guardHostTool = name: pkgs.writeShellScriptBin name ''
+      _cwd="$(${pkgs.coreutils}/bin/pwd -P)/"
+      for _t in ${pkgs.lib.escapeShellArgs agentWritableDirs}; do
+        case "$_cwd" in
+          "$(${pkgs.coreutils}/bin/realpath -m "$_t")/"*)
+            echo "⛔ '${name}' is disabled here: this tree is written by the sandboxed agents." >&2
+            echo "   Running host '${name}' could execute agent-planted hooks/config on your host." >&2
+            echo "   Use the jailed tools, or run '${name}' from outside the sandbox after reviewing the diff." >&2
+            exit 1 ;;
+        esac
+      done
+      # Outside any agent-writable tree: hand off to the real host tool (skip this wrapper).
+      readarray -t _paths < <(type -aP ${name})
+      _real="''${_paths[1]:-}"
+      if [ -z "$_real" ]; then
+        echo "${name}: no host '${name}' found on PATH" >&2
+        exit 127
+      fi
+      exec "$_real" "$@"
+    '';
+
+    guardedHostTools = [
+      "git" "gh" "julia" "claude" "kaimon"          # the sandboxed workflow's tools
+      "make" "npm" "node" "python" "python3" "pip"  # common project-code runners
+      "uv" "conda" "docker" "apt"
+    ];
+
   in
   {
     devShells.default = pkgs.mkShell {
@@ -48,68 +149,18 @@
 
       packages = with pkgs; [
         nixd zsh wget gawkInteractive ps gzip unzip gnutar
-        (writeShellScriptBin "claude" ''exec jailed-claude "$@"'')
-        (writeShellScriptBin "yolo-claude" ''exec jailed-claude --dangerously-skip-permissions "$@"'')
-        (writeShellScriptBin "kaimon" ''exec jailed-kaimon "$@"'')
+        (writeShellScriptBin "yolo-jailed-claude" ''exec jailed-claude --dangerously-skip-permissions "$@"'')
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
 
         (jailedAgents.makeJailedClaude { })
-        (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg pkgs.python3 ]; })
-        (jailedAgents.makeJailedJulia { extraPkgs = [ pkgs.python3 ]; })
-        (jailedAgents.makeJailedJulia { extraPkgs = [ pkgs.python3 ]; network = true; name = "jailed-julia-net"; })
+        (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg python3 gh]; })
+        (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; })
+        (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; network = true; name = "jailed-julia-net"; })
         (jailedAgents.makeJailedKaimon { })
-      ];
 
-      shellHook = ''
-        # Fail fast if devshellRoot doesn't exist — avoids silently creating directories at a wrong path.
-        if [ ! -d "${devshellRoot}" ]; then
-          echo "ERROR: devshellRoot does not exist: ${devshellRoot}" >&2
-          exit 1
-        fi
-
-        # Require running from within devshellRoot, to avoid forgeting setting devshellRoot properly
-        _cwd="$(pwd -P)"
-        case "$_cwd/" in
-          "${pkgs.lib.removeSuffix "/" devshellRoot}/"*) ;;
-          *)
-            echo "ERROR: must be run from within devshellRoot = ${devshellRoot}, did you set it properly in flake.nix?" >&2
-            echo "  current: $_cwd" >&2
-            exit 1
-            ;;
-        esac
-        _session="$(basename "$_cwd")"
-        _session="''${_session//[^a-zA-Z0-9_-]/_}"
-
-        # require tmux
-        if ! command -v tmux >/dev/null 2>&1; then
-          echo "ERROR: tmux is not installed on the host — install it via your OS package manager" >&2
-          exit 1
-        fi
-
-        # Refuse to run inside any other tmux session — new-session cannot attach when nested.
-        if [ -n "''${TMUX:-}" ]; then
-          echo "ERROR: cannot start the tmux development shell within a tmux session — detach first (Ctrl-b d)" >&2
-          exit 1
-        fi
-
-        # Activate home-manager config into the agentshome dir (never touches real $HOME).
-        HOME=${homeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
-          ${devshellHomeManager.activationPackage}/activate
-
-        # Create or reset the tmux session, then apply the user-editable window
-        # layout. @proj is the project dir.
-        _layout="${tmuxSessionFile}"
-        if [ ! -f "$_layout" ]; then
-          echo "ERROR: tmux session file not found: $_layout" >&2
-          exit 1
-        fi
-        tmux -L ${tmuxServer} kill-session -t "=$_session" 2>/dev/null || true
-        tmux -L ${tmuxServer} -f ${configFile."tmux/tmux.conf".source} new-session -d -s "$_session" -c "$_cwd"
-        tmux -L ${tmuxServer} set-option  -t "$_session" @proj "$_cwd"
-        tmux -L ${tmuxServer} source-file -t "$_session:" "$_layout"
-        unset _cwd _layout
-        tmux -L ${tmuxServer} attach-session -t "$_session"
-      '';
+        newAgentSession
+      ]
+      ++ builtins.map guardHostTool guardedHostTools;
     };
   });
 }
