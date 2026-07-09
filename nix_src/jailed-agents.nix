@@ -115,7 +115,8 @@ let
       program = claude-pkg;
       network = true;
       preHook = ''
-        touch ${homeDirectory}/.claude.json
+        touch       ${homeDirectory}/.claude.json
+        echo '{}' > ${homeDirectory}/.claude.json # avoid invalid json bug
       '';
       options = claudeConfigWriteBinds;
     };
