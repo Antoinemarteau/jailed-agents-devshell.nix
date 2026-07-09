@@ -54,7 +54,7 @@ devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
 ```
 variable in the `nix_src/flake.nix` file, to the actual absolute path the repo.
 
-Then enable `direnv` for the repo from its root:
+Then enable `direnv` for the repo from its root
 ```bash
 direnv allow
 ```
@@ -62,7 +62,7 @@ Entering any project under `projects/` now puts the sandboxed tools on `PATH`
 automatically.
 
 If `nix-direnv` is not installed on the machine, install it at user level for
-faster cached reloads (optional but recommended):
+faster cached reloads (optional but recommended)
 ```bash
 nix profile install nixpkgs#nix-direnv
 echo 'source $HOME/.nix-profile/share/nix-direnv/direnvrc' >> ~/.config/direnv/direnvrc
@@ -70,25 +70,14 @@ echo 'source $HOME/.nix-profile/share/nix-direnv/direnvrc' >> ~/.config/direnv/d
 
 ### Ubuntu setup
 
-Extra steps are required on Ubuntu that by default [restricts user
+Ubuntu (23.10+) by default [restricts unprivileged user
 namespaces](https://etbe.coker.com.au/2024/04/24/ubuntu-24-04-bubblewrap/) via
-apparmor.
-A relatively simple and safe solution is to:
+apparmor, so bubblewrap fails with `bwrap: setting up uid map: Permission
+denied`. To fix it, run
 ```bash
-sudo apt install apparmor-profiles # install pre-made apparmor profile
-sudo ln -s /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/ # add one for bubblwrap
-sudo apparmor_parser /etc/apparmor.d/bwrap-userns-restrict. # load it, optionally use -r to reload, or --delete then --add.
-systemctl restart
+sudo cp nix_src/apparmor/bwrap-userns-restrict /etc/apparmor.d/
+sudo apparmor_parser -r -W /etc/apparmor.d/bwrap-userns-restrict
 ```
-
-If this not enough (you get an error at next step), you can simply do
-```bash
-sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
-sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-```
-but it is [unsafe and
-discouraged](https://gitlab.com/apparmor/apparmor/-/wikis/unprivileged_userns_restriction)
-on personal machine. These are reset to default by setting 1 instead of 0.
 
 
 ## Usage
