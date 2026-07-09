@@ -23,14 +23,18 @@
     devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
     # Variables that can be optionally modified
     devshellUser           = "agents";         # username in the jail
-    devshellHomeFolder     = "agentshome";     # host dir for the jail's home
+    devshellHomeFolder     = "agentshome";     # host dir holding the jail-bound agent data
+    devshellHostHomeFolder = ".hosthome";       # host dir for the interactive devshell home (zsh/tmux/nvim)
     devshellProjectsFolder = "projects";       # host dir for the coding projects
+    agentHomeDirectory = "${devshellRoot}/${devshellHomeFolder}";
     tmuxServer             = "julia_agents";   # tmux server name
-    tmuxSessionFile        = "${devshellRoot}/${devshellHomeFolder}/.config/tmux/default-session.conf"; # user-editable window layout
+    tmuxSessionFile        = "${devshellRoot}/${devshellHostHomeFolder}/.config/tmux/default-session.conf"; # user-editable window layout
 
-    # home manager configuration for tmux, zsh, julia, etc.
-    devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHomeFolder nvim-pkg; };
-    homeDirectory = devshellHomeManager.config.home.homeDirectory;
+    # home manager configuration for the interactive devshell home (tmux, zsh, julia,
+    # etc.), activated into <devshellRoot>/.hosthome. Kept out of agentshome so no host
+    # dotfiles live in a tree that is bound into the jails.
+    devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHostHomeFolder nvim-pkg; };
+    hostHomeDirectory = devshellHomeManager.config.home.homeDirectory;
     configFile = devshellHomeManager.config.xdg.configFile;
     tmux-pkg = devshellHomeManager.config.programs.tmux.package;
 
@@ -39,7 +43,7 @@
     claude-pkg = llm-agents.packages.${system}.claude-code;
     nvim-pkg = nixconfig.packages.${system}.default;
 
-    jailedAgents = import ./jailed-agents.nix { inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder devshellUser homeDirectory; };
+    jailedAgents = import ./jailed-agents.nix { inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder devshellUser; homeDirectory = agentHomeDirectory; };
 
     # Launch (or reset) a tmux development session for the current project. This is the
     # explicit entry point: entering the devShell (via direnv or `nix develop`) only puts
@@ -77,8 +81,8 @@
         exit 1
       fi
 
-      # Activate home-manager config into the agentshome dir (never touches real $HOME).
-      HOME=${homeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
+      # Activate home-manager config into the .hosthome dir (never touches real $HOME).
+      HOME=${hostHomeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
         ${devshellHomeManager.activationPackage}/activate
 
       # Create or reset the tmux session, then apply the user-editable window
@@ -112,15 +116,15 @@
       tmux -L ${tmuxServer} attach-session -t "=$_session"
     '';
 
-    # Directories the sandboxed agents can write to. Keep the interactive
-    # shell's own startup files (e.g. agentshome/.config/zsh) OUT of this set
-    # — they must never become agent-writable.
+    # Directories the sandboxed agents can write to. The interactive devshell home
+    # lives in a separate tree (.hosthome/), so its startup files can never become
+    # agent-writable.
     agentWritableDirs = [
       "${devshellRoot}/${devshellProjectsFolder}"
-      "${homeDirectory}/.claude"
-      "${homeDirectory}/.julia"
-      "${homeDirectory}/.cache/kaimon"
-      "${homeDirectory}/.config/kaimon"
+      "${agentHomeDirectory}/.claude"
+      "${agentHomeDirectory}/.julia"
+      "${agentHomeDirectory}/.cache/kaimon"
+      "${agentHomeDirectory}/.config/kaimon"
     ];
 
     # Shadow a host dev tool in agent writable directories. This is a

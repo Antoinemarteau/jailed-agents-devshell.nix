@@ -24,16 +24,18 @@ This repository has the following structure:
 ```
 .
 ├── projects/           # Folder containing all development projects
-├── agentshome/         # home folder (partially) forwarded to the sandbox
+├── agentshome/         # agent data (partially) forwarded to the sandboxes
 │   ├── .claude/        # agent specific Claude config
 │   ├── .config/
-│   │   ├── kaimon/     # contains kaimon config
-│   │   └── tmux/default-session.conf # default tmux session layout
+│   │   └── kaimon/     # contains kaimon config
 │   └── .julia/         # agent specific julia folder
 │       └── startup.jl
 ├── nix_src/            # nix code for the development environment
 ├── .envrc              # direnv config. (automatically activate dev. environment)
-└── README.md
+├─ README.md
+└── .hosthome/          # host interactive home (home-manager: zsh/tmux/nvim), never jailed
+    └── .config/
+       └── tmux/default-session.conf # user-editable tmux session layout
 ```
 
 Clone the repository. Change the hard-coded
@@ -107,7 +109,7 @@ This creates a tmux session with 4 windows:
 - claude: to run sandboxed claude-code CLI
 - repl: automatically runs sandboxed Julia REPL serving Kaimon
 
-This default session can be personalized by modifying `agentshome/.config/tmux/default-session.conf`.\
+This default session can be personalized by modifying `.hosthome/.config/tmux/default-session.conf`.\
 There are two options to run sandboxed Claude from there:
 ```bash
 jailed-claude      # sandboxed claude with normal permission, or

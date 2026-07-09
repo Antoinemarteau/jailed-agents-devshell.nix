@@ -1,5 +1,6 @@
 # direnv temp file
-.direnv/
+/.direnv/
+/.hosthome/
 
 # Claude's config
 /agentshome/.claude.json

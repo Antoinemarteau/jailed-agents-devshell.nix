@@ -1,10 +1,10 @@
-{ pkgs, home-manager, devshellRoot, devshellUser, devshellHomeFolder, nvim-pkg }:
+{ pkgs, home-manager, devshellRoot, devshellUser, devshellHostHomeFolder, nvim-pkg }:
 
 home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
   modules = [({ config, ... }: {
     home.username = devshellUser;
-    home.homeDirectory = devshellRoot + "/" + devshellHomeFolder;
+    home.homeDirectory = devshellRoot + "/" + devshellHostHomeFolder;
     home.stateVersion = "25.11";
 
     home.packages = [ nvim-pkg ];
