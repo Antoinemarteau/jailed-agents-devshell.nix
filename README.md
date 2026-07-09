@@ -118,8 +118,9 @@ The default `jailed-julia`, doesn't have internet access. If you want a jailed
 Julia REPL with internet, use `jailed-julia-net`.
 
 On the first session you ever create, you need to:
-- Launch `jailed-julia-net` to install Kaimon
-- Launch `jailed-claude` that complains about invalid config, select second option (reset config), and launch it again.
+- Launch `jailed-julia-net` to install Kaimon;
+- Launch `jailed-kaimon` to setup Kaimon, choose "Lax" mode (filtering who acceses Kaimon is pointless since it is sandboxed);
+- Launch `jailed-claude` that complains about invalid config, select second option (reset config), and launch it again;
 - Once Claude is connected, run `claude-connect-kaimon` from the shell to connect the MCP
 Claude should then be ready to pass Kaimon's `usage_quiz` and read `usage_instructions`.
 
