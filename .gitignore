@@ -1,6 +1,5 @@
-example_nix_config/
-plan.md
-result
+# direnv temp file
+.direnv/
 
 # Claude's config
 /agentshome/.claude.json
@@ -23,3 +22,9 @@ result
 /agentshome/.nix-profile
 /agentshome/.nix-defexpr
 /agentshome/.zshenv
+
+# dev
+example_nix_config/
+plan.md
+result
+
