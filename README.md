@@ -27,7 +27,8 @@ This repository has the following structure:
 ├── agentshome/         # agent data (partially) forwarded to the sandboxes
 │   ├── .claude/        # agent specific Claude config
 │   ├── .config/
-│   │   └── kaimon/     # contains kaimon config
+│   │   ├── kaimon/
+│   │   └── zsh/        # sandboxed shell config
 │   └── .julia/         # agent specific julia folder
 │       └── startup.jl
 ├── nix_src/            # nix code for the development environment
