@@ -10,23 +10,31 @@ if isnothing(Base.find_package("TestEnv"))
     var"#Pkg".add("TestEnv")
 end
 
-if isnothing(Base.find_package("Kaimon"))
-    var"#Pkg".add("Kaimon")
-end
-
 if !isfile(joinpath(first(DEPOT_PATH), "bin", "kaimon"))
     var"#Pkg".Apps.add("Kaimon")
 end
 
-# Kaimon Gate — auto-connect this REPL to the TUI server
 try
     using Revise
 catch e
     @info "ℹ Revise not loaded (optional - install with: Pkg.add(\"Revise\"))"
 end
-try
-    using Kaimon
-    Gate.serve()
-catch e
-    @warn "Kaimon Gate failed to start" exception = e
+
+# Kaimon Gate — auto-connect this REPL to the Kaimon dashboard.
+# Uses the lightweight KaimonGate package. Activates only when KaimonGate is
+# available in this environment, so other Julia versions or clean envs start
+# silently — no warnings in sessions that don't have it.
+if Base.identify_package("KaimonGate") !== nothing
+    try
+        @eval using Revise
+    catch
+    end
+    try
+        @eval using KaimonGate
+        @eval KaimonGate.serve()
+    catch e
+        @warn "KaimonGate failed to start" exception = e
+    end
 end
+# Kaimon Gate — end
+

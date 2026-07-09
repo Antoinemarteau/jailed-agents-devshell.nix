@@ -4,8 +4,9 @@
     "::1"
   ],
   "api_keys": [],
-  "created_at": 1,
-  "editor": "vscode",
+  "created_at": 1783563683,
+  "editor": "nvim",
+  "gate_setup_version": 1,
   "mode": "lax",
   "personality": "dragon",
   "port": 2828
