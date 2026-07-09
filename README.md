@@ -1,11 +1,39 @@
 # ai-agent-nix-sandboxing
 
-A reproducible development environment for Julia projects on Linux, based on
-nix, tmux and direnv. Currently, it provides the Claude and Kaimon CLI as well
-as Julia REPL, sandboxed in different Linux "user namespaces".
+A reproducible agentic development environment for Julia projects on Linux,
+based on nix, tmux and direnv. Currently, it provides the Claude and Kaimon CLI
+as well as Julia REPL, sandboxed in different Linux "user namespaces".
+
+This repository facilitates using coding agents in a reproducible, personalized
+and safer manner, on local machine or remotely controlled via ssh.
+It has the following structure:
+```sh
+.   # everyday development folders
+├── projects/           # Folder containing all development projects
+├── agentshome/         # agent data (partially) forwarded to the sandboxes
+│   ├── .claude/        # agent specific Claude config
+│   ├── .config/
+│   │   ├── kaimon/
+│   │   └── zsh/        # sandboxed shell config
+│   └── .julia/         # agent specific julia folder
+│       └── startup.jl
+│
+│   # dev. environment definition and personalization
+├── nix_src/            # nix code for the development environment
+├── .envrc              # direnv config. (automatically activate dev. environment)
+├─ README.md
+└── .hosthome/          # out-of-sandbox shell personalization
+    └── .config/
+       └── tmux/default-session.conf # user-editable tmux session layout
+```
+`nix` and `direnv` are the only software needed already installed. The
+objective of this repo is that everything else is automatically installed in a
+reproducible way upon cloning it, except what's in `.julia` and `.claude`
+folders config and your projects, that you populate yourself.
 
 The sandboxes can be run from an unprivileged environment, still the sandboxed
-agent can be given full privilege.
+agent can be given full privilege. The sandboxed coding tools can only write
+into `projects/` and parts of `agentshome/`.
 
 > [!WARNING]
 > I have no security background training, there is no security guarantee. I would only
@@ -20,42 +48,21 @@ Before starting, you will need [`nix`](https://nixos.org/download/) and
 optionally [`direnv`](https://direnv.net/) (recommended) installed on your
 machine.
 
-This repository has the following structure:
-```
-.
-├── projects/           # Folder containing all development projects
-├── agentshome/         # agent data (partially) forwarded to the sandboxes
-│   ├── .claude/        # agent specific Claude config
-│   ├── .config/
-│   │   ├── kaimon/
-│   │   └── zsh/        # sandboxed shell config
-│   └── .julia/         # agent specific julia folder
-│       └── startup.jl
-├── nix_src/            # nix code for the development environment
-├── .envrc              # direnv config. (automatically activate dev. environment)
-├─ README.md
-└── .hosthome/          # host interactive home (home-manager: zsh/tmux/nvim), never jailed
-    └── .config/
-       └── tmux/default-session.conf # user-editable tmux session layout
-```
-
 Clone the repository. Change the hard-coded
 ```nix
 devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
 ```
-variable in the `nix_src/flake.nix` file, to the
-actual absolute path of the local folder the repo was cloned in.
+variable in the `nix_src/flake.nix` file, to the actual absolute path the repo.
 
-Then enable `direnv` for the checked-in `.envrc`, from the repository root
-(the `devshellRoot`):
+Then enable `direnv` for the repo from its root:
 ```bash
 direnv allow
 ```
 Entering any project under `projects/` now puts the sandboxed tools on `PATH`
 automatically.
 
-For faster cached reloads (optional, recommended), install `nix-direnv` at user level
-— no system or home-manager config required:
+If `nix-direnv` is not installed on the machine, install it at user level for
+faster cached reloads (optional but recommended):
 ```bash
 nix profile install nixpkgs#nix-direnv
 echo 'source $HOME/.nix-profile/share/nix-direnv/direnvrc' >> ~/.config/direnv/direnvrc
@@ -93,51 +100,47 @@ git clone <url> projects/my_project # don't do that from within projects/
 cd projects/my_project
 ```
 
-Then, from the project folder (must be within `<devshellRoot>/projects`, where
-`direnv` has loaded the tools), start (or restart) the `tmux` development session:
+Then, from the project folder, start (or restart) the `tmux` development session
 ```bash
 new_agent_session
 ```
-On a host without `direnv`, load the environment first and then launch a session:
+On a host without `direnv`, load the environment first and then launch a session
 ```bash
 nix develop <devshellRoot>/nix_src
 new_agent_session
 ```
 
 This creates a tmux session with 4 windows:
-- kaimon: automatically runs sandboxed Kaimon CLI
-- shell: an un-sandboxed terminal
-- claude: to run sandboxed claude-code CLI
-- repl: automatically runs sandboxed Julia REPL serving Kaimon
+- kaimon: automatically runs sandboxed Kaimon CLI, `jailed-kaimon`
+- shell: an un-sandboxed terminal. You can get a sandboxed one using `jailed-shell`
+- claude: to run sandboxed claude-code CLI, `jailed-claude` or `yolo-jailed-claude`
+- repl: automatically runs sandboxed Julia REPL serving Kaimon, `jailed-julia`
 
-This default session can be personalized by modifying `.hosthome/.config/tmux/default-session.conf`.\
-There are two options to run sandboxed Claude from there:
-```bash
-jailed-claude      # sandboxed claude with normal permission, or
-yolo-jailed-claude # sandboxed claude with --dangerously-skip-permissions
-```
+This default session can be personalized by modifying `.hosthome/.config/tmux/default-session.conf`.
 
-The default `jailed-julia`, doesn't have internet access. If you want a jailed
-Julia REPL with internet, use `jailed-julia-net`.
-
-On the first session you ever create, you need to:
-- Launch `jailed-julia-net` to install Kaimon;
-- Launch `jailed-kaimon` to setup Kaimon, choose "Lax" mode (filtering who acceses Kaimon is pointless since it is sandboxed);
-- Launch `jailed-claude` that complains about invalid config, select second option (reset config), and launch it again;
-- Once Claude is connected, run `claude-connect-kaimon` from the shell to connect the MCP
+On the first session you ever create, `.julia` and other configs are empty, so you need to:
+- Launch `jailed-julia-net` so that `startup.jl` installs Kaimon (`jailed-julia` has no internet)
+- Launch `jailed-kaimon` to setup Kaimon, choose "Lax" mode (filtering who acceses Kaimon is pointless since it is sandboxed)
+- Run `claude-connect-kaimon` from the shell to connect the MCP
+- Launch `jailed-claude`
 Claude should then be ready to pass Kaimon's `usage_quiz` and read `usage_instructions`.
 
+On remote machine, `yolo-jailed-claude` can be used, it's basically an alias to
+`jailed-claude --dangerously-skip-permissions`.
+
 To return to the development session later, do not re-run `new_agent_session`
-(it kills and recreates the session and all existing agents), but from the
-project folder:
+(it kills and recreates the session and all existing agents), but
 ```bash
 attach_agent_session
 ```
-which re-attaches the session named after the current folder. Or, manually:
+from the folder the session was started from.
+
+Or, manually
 ```bash
 tmux -L julia_agents ls # see live sessions
 tmux -L julia_agents attach -t <session>
 ```
+since the session is named after the folder.\
 The non-default tmux socket `julia_agents` is used because the host tmux config
 is overwritten with one provided from nix, for use on remote machine.
 
