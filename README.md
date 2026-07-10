@@ -153,6 +153,18 @@ security boundary: not all dev tools are shadowed, and absolute paths
 (`/usr/bin/git`) or tools that embed git (libgit2, `gh`) bypass it.
 
 
+### Git identity and GitHub token
+
+To give a git identity for the agent, set name and email in
+`agentshome/.gitconfig`. If you want it to pull/push, create
+`agentshome/.git-credentials` with a GitHub [fine-grained Personal Access Token
+(PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token):
+```bash
+echo 'https://x-access-token:github_pat_{YOUR-TOKEN-HERE}@github.com' > agentshome/.git-credentials
+chmod 600 agentshome/.git-credentials
+```
+Make sure to not commit .git-credentials to git.
+
 ## Technical details
 
 The tool is developed using nix and only requires installing the [nix package

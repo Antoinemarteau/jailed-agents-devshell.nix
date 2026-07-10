@@ -37,6 +37,11 @@ let
     (rw-bind "${homeDirectory}/.claude.json" "${jailHomeDirectory}/.claude.json")
   ];
 
+  gitReadBinds = with jail.combinators; [
+    (try-ro-bind "${homeDirectory}/.gitconfig" "${jailHomeDirectory}/.gitconfig")
+    (try-ro-bind "${homeDirectory}/.git-credentials" "${jailHomeDirectory}/.git-credentials")
+  ];
+
   juliaDepotWriteBinds = with jail.combinators; [
     (rw-bind "${homeDirectory}/.julia" "${jailHomeDirectory}/.julia")
   ];
@@ -97,7 +102,7 @@ let
         # makes sure a writable and host persisted .claude.json file exists
         [ -f ${homeDirectory}/.claude.json ] || echo '{}' > ${homeDirectory}/.claude.json
       '';
-      options = claudeConfigWriteBinds;
+      options = claudeConfigWriteBinds ++ gitReadBinds;
     };
 
   makeJailedJulia = { extraPkgs ? [], network ? false, name ? "jailed-julia" }:
@@ -154,6 +159,7 @@ let
       '';
       options = with jail.combinators;
         claudeConfigWriteBinds ++
+        gitReadBinds ++
         juliaDepotWriteBinds ++
         kaimonConfigWriteBinds ++
         kaimonCacheWriteBinds ++

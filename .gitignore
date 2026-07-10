@@ -2,6 +2,9 @@
 /.direnv/
 /.hosthome/
 
+# git HTTPS credential (secret)
+/agentshome/.git-credentials
+
 # Claude's config
 /agentshome/.claude.json
 /agentshome/.claude/.credentials.json

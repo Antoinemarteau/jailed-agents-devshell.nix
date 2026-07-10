@@ -1,0 +1,5 @@
+[user]
+  name = Antoine Marteau
+  email = antoine.marteau@protonmail.com
+[credential]
+  helper = store
