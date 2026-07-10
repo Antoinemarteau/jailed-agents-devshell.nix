@@ -170,8 +170,8 @@
         (writeShellScriptBin "yolo-jailed-claude" ''exec jailed-claude --dangerously-skip-permissions "$@"'')
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
 
-        (jailedAgents.makeJailedClaude { })
-        (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg python3 gh]; })
+        (jailedAgents.makeJailedClaude { extraPkgs = [ mcp-nixos ]; })
+        (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg python3 gh mcp-nixos ]; })
         (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; })
         (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; network = true; name = "jailed-julia-net"; })
         (jailedAgents.makeJailedKaimon { })
