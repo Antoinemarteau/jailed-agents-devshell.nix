@@ -270,23 +270,16 @@ let
     esac
   '';
 
-  # `inJailPrelude` runs inside the jail (e.g. to launch socat bridges) before the
-  # program is exec'd. `proxyDomains` (a domain list) makes the host wrapper start
-  # the allowlist proxy for this jail on a unix socket bound in at jailProxySock,
-  # and tears it down when the jail exits.
+  # `proxyDomains` (a domain list) makes the host wrapper start the allowlist proxy
+  # for this jail on a unix socket bound in at jailProxySock, and tear it down when
+  # the jail exits.
   makeJailed = { name, program, preHook ? "", network ? false, options ? [], extraPkgs ? [],
-                 inJailPrelude ? "", proxyDomains ? null }:
+                 proxyDomains ? null }:
     let
-      wrappedProgram =
-        if inJailPrelude == "" then program
-        else pkgs.writeShellScriptBin "${name}-wrapped" ''
-          ${inJailPrelude}
-          exec ${pkgs.lib.getExe program} "$@"
-        '';
       proxyBinds = pkgs.lib.optionals (proxyDomains != null) [
         (jail.combinators.rw-bind "${homeDirectory}/.cache/jail-net/${name}.sock" jailProxySock)
       ];
-      inner = jail "${name}-inner" wrappedProgram (
+      inner = jail "${name}-inner" program (
         commonJailOptions ++
         pkgs.lib.optionals network [ jail.combinators.network ] ++
         proxyBinds ++
@@ -322,9 +315,17 @@ let
     '';
 
   makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude", allowedDomains ? defaultAllowedDomains }:
-    makeJailed {
+    let
+      claudeLauncher = pkgs.writeShellScriptBin "claude" ''
+        # empty netns: reach the internet only through the host allowlist proxy
+        socat TCP-LISTEN:${toString proxyPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailProxySock} 2>/dev/null &
+        # reach Kaimon's MCP server over the shared unix socket (localhost bypasses the proxy via NO_PROXY)
+        socat TCP-LISTEN:${toString mcpPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailMcpSock} 2>/dev/null &
+        exec ${pkgs.lib.getExe claude-pkg} "$@"
+      '';
+    in makeJailed {
       inherit name extraPkgs;
-      program = claude-pkg;
+      program = claudeLauncher;
       network = false;
       proxyDomains = allowedDomains;
       preHook = ''
@@ -332,12 +333,6 @@ let
         [ -f ${homeDirectory}/.claude.json ] || echo '{}' > ${homeDirectory}/.claude.json
         # shared dir for the Claude<->Kaimon MCP socket
         mkdir -p ${homeDirectory}/.cache/kaimon-jail-sock
-      '';
-      inJailPrelude = ''
-        # empty netns: reach the internet only through the host allowlist proxy
-        socat TCP-LISTEN:${toString proxyPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailProxySock} 2>/dev/null &
-        # reach Kaimon's MCP server over the shared unix socket (localhost bypasses the proxy via NO_PROXY)
-        socat TCP-LISTEN:${toString mcpPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailMcpSock} 2>/dev/null &
       '';
       options = claudeConfigWriteBinds ++ gitReadBinds ++ mcpBridgeBinds ++ localhostResolveBinds ++ (with jail.combinators; [
         (set-env "HTTP_PROXY"  "http://127.0.0.1:${toString proxyPort}")
@@ -375,6 +370,9 @@ let
   makeJailedKaimon = { extraPkgs ? [], name ? "jailed-kaimon" }:
     let
       kaimonLauncher = pkgs.writeShellScriptBin "kaimon" ''
+        # expose Kaimon's local MCP server on the shared unix socket for the jailed client
+        rm -f ${jailMcpSock}
+        socat UNIX-LISTEN:${jailMcpSock},fork,reuseaddr TCP:127.0.0.1:${toString mcpPort} 2>/dev/null &
         exec ~/.julia/bin/kaimon "$@"
       '';
     in makeJailed {
@@ -386,11 +384,6 @@ let
         mkdir -p ${homeDirectory}/.cache/kaimon/sock
         mkdir -p ${homeDirectory}/.cache/kaimon-jail-sock
         mkdir -p ${homeDirectory}/.config/kaimon
-      '';
-      inJailPrelude = ''
-        # expose Kaimon's local MCP server on the shared unix socket for the jailed client
-        rm -f ${jailMcpSock}
-        socat UNIX-LISTEN:${jailMcpSock},fork,reuseaddr TCP:127.0.0.1:${toString mcpPort} 2>/dev/null &
       '';
       options = with jail.combinators;
         juliaDepotWriteBinds ++
