@@ -14,6 +14,10 @@ if !isfile(joinpath(first(DEPOT_PATH), "bin", "kaimon"))
     var"#Pkg".Apps.add("Kaimon")
 end
 
+if isnothing(Base.find_package("KaimonGate"))
+    var"#Pkg".add("KaimonGate")
+end
+
 try
     using Revise
 catch e
@@ -25,10 +29,6 @@ end
 # available in this environment, so other Julia versions or clean envs start
 # silently — no warnings in sessions that don't have it.
 if Base.identify_package("KaimonGate") !== nothing
-    try
-        @eval using Revise
-    catch
-    end
     try
         @eval using KaimonGate
         @eval KaimonGate.serve()
