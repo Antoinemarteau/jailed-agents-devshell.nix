@@ -2,4 +2,6 @@
   name = Antoine Marteau
   email = antoine.marteau@protonmail.com
 [credential]
-  helper = store
+  helper = "!f() { [ \"$1\" = \"get\" ] && git credential-store --file ~/.git-credentials \"$1\"; }; f"
+[push]
+  autoSetupRemote = true
