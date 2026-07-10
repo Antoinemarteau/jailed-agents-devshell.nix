@@ -24,7 +24,10 @@
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.config/gh/**)",
-      "Read(~/.claude/**)",
+      "Read(~/.*claude.json)",
+      "Read(~/.claude/.*claude.json)",
+      "Read(~/.claude/.credentials.json)",
+      "Read(~/.git-credentials)",
       "Bash(curl:*)",
       "Bash(wget:*)"
     ],
