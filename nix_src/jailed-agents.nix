@@ -78,16 +78,15 @@ let
     (fwd-env "NIX_LD_LIBRARY_PATH")
   ];
 
-  # ── Network restriction (no srt) ──────────────────────────────────────────
-  # A network-restricted jail keeps jail.nix's default empty netns (no `network`
-  # combinator = kernel-enforced deny-all egress) and reaches the outside world
-  # only through a host-side allowlist proxy, bridged in over a unix socket by an
-  # in-jail socat. Claude<->Kaimon MCP is bridged the same way over a shared unix
-  # socket, so localhost:2828 keeps working once both jails leave the host netns.
+  # ── Network restriction ─────────────────────────────────────────────────────
+  # The jails without network reach the outside world only through a host-side
+  # allowlist proxy, bridged in over a unix socket by an in-jail socat.
+  # Claude<->Kaimon MCP is bridged the same way over a shared unix socket, so
+  # localhost:2828 keeps working once both jails leave the host netns.
   proxyPort = 3128;                                   # in-jail TCP that HTTP(S)_PROXY targets
   mcpPort = 2828;                                     # in-jail TCP for Kaimon's MCP server
   jailProxySock = "/run/jail-net/proxy.sock";         # host proxy socket, bound into the jail here
-  jailMcpSock = "${jailHomeDirectory}/.cache/kaimon-jail-sock/mcp.sock"; # shared MCP socket (both jails)
+  jailKaimonSock = "${jailHomeDirectory}/.cache/kaimon-jail-sock/mcp.sock";
   cacertBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
 
   # Default egress allowlist for Claude. Suffix-matched, so "anthropic.com" also
@@ -316,27 +315,21 @@ let
       ${runInner}
     '';
 
-  makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude", allowedDomains ? defaultAllowedDomains }:
+  # restrictNetwork = true : empty netns, internet only via the host allowlist proxy.
+  # restrictNetwork = false: full host network (for use on an isolated remote server).
+  # The Claude<->Kaimon MCP socat bridge is present either way, since Kaimon always
+  # runs in its own netns.
+  makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude", allowedDomains ? defaultAllowedDomains,
+                       restrictNetwork ? false, extraArgs ? "" }:
     let
+      proxyLeg = "socat TCP-LISTEN:${toString proxyPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailProxySock} 2>/dev/null &";
       claudeLauncher = pkgs.writeShellScriptBin "claude" ''
-        # empty netns: reach the internet only through the host allowlist proxy
-        socat TCP-LISTEN:${toString proxyPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailProxySock} 2>/dev/null &
+        ${pkgs.lib.optionalString restrictNetwork proxyLeg}
         # reach Kaimon's MCP server over the shared unix socket (localhost bypasses the proxy via NO_PROXY)
-        socat TCP-LISTEN:${toString mcpPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailMcpSock} 2>/dev/null &
-        exec ${getExe claude-pkg} "$@"
+        socat TCP-LISTEN:${toString mcpPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailKaimonSock} 2>/dev/null &
+        exec ${getExe claude-pkg} ${extraArgs} "$@"
       '';
-    in makeJailed {
-      inherit name extraPkgs;
-      program = claudeLauncher;
-      network = false;
-      proxyDomains = allowedDomains;
-      preHook = ''
-        # makes sure a writable and host persisted .claude.json file exists
-        [ -f ${homeDirectory}/.claude.json ] || echo '{}' > ${homeDirectory}/.claude.json
-        # shared dir for the Claude<->Kaimon MCP socket
-        mkdir -p ${homeDirectory}/.cache/kaimon-jail-sock
-      '';
-      options = claudeConfigWriteBinds ++ gitReadBinds ++ mcpBridgeBinds ++ localhostResolveBinds ++ (with jail.combinators; [
+      restrictedNetOptions = localhostResolveBinds ++ (with jail.combinators; [
         (set-env "HTTP_PROXY"  "http://127.0.0.1:${toString proxyPort}")
         (set-env "HTTPS_PROXY" "http://127.0.0.1:${toString proxyPort}")
         (set-env "http_proxy"  "http://127.0.0.1:${toString proxyPort}")
@@ -351,6 +344,19 @@ let
         (set-env "NODE_EXTRA_CA_CERTS" cacertBundle)
         (add-pkg-deps [ pkgs.cacert ])
       ]);
+    in makeJailed {
+      inherit name extraPkgs;
+      program = claudeLauncher;
+      network = !restrictNetwork;
+      proxyDomains = if restrictNetwork then allowedDomains else null;
+      preHook = ''
+        # makes sure a writable and host persisted .claude.json file exists
+        [ -f ${homeDirectory}/.claude.json ] || echo '{}' > ${homeDirectory}/.claude.json
+        # shared dir for the Claude<->Kaimon MCP socket
+        mkdir -p ${homeDirectory}/.cache/kaimon-jail-sock
+      '';
+      options = claudeConfigWriteBinds ++ gitReadBinds ++ mcpBridgeBinds
+        ++ pkgs.lib.optionals restrictNetwork restrictedNetOptions;
     };
 
   makeJailedJulia = { extraPkgs ? [], network ? false, name ? "jailed-julia" }:
@@ -373,8 +379,8 @@ let
     let
       kaimonLauncher = pkgs.writeShellScriptBin "kaimon" ''
         # expose Kaimon's local MCP server on the shared unix socket for the jailed client
-        rm -f ${jailMcpSock}
-        socat UNIX-LISTEN:${jailMcpSock},fork,reuseaddr TCP:127.0.0.1:${toString mcpPort} 2>/dev/null &
+        rm -f ${jailKaimonSock}
+        socat UNIX-LISTEN:${jailKaimonSock},fork,reuseaddr TCP:127.0.0.1:${toString mcpPort} 2>/dev/null &
         exec ~/.julia/bin/kaimon "$@"
       '';
     in makeJailed {

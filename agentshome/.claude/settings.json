@@ -34,5 +34,6 @@
     ],
     "defaultMode": "default"
   },
-  "theme": "dark"
+  "theme": "dark",
+  "skipDangerousModePermissionPrompt": true
 }

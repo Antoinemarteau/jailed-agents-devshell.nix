@@ -165,12 +165,20 @@
       NIX_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ];
 
       packages = with pkgs; [
-        tmux-pkg
-        nixd zsh wget gawkInteractive ps gzip unzip gnutar
-        (writeShellScriptBin "yolo-jailed-claude" ''exec jailed-claude --dangerously-skip-permissions "$@"'')
+        tmux-pkg nixd zsh wget gawkInteractive ps gzip unzip gnutar
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
 
-        (jailedAgents.makeJailedClaude { extraPkgs = [ mcp-nixos ]; })
+        (jailedAgents.makeJailedClaude {
+          name = "jailed-claude";
+          extraPkgs = [ mcp-nixos ];
+          extraArgs = "--dangerously-skip-permissions";
+          restrictNetwork = true;
+        })
+        (jailedAgents.makeJailedClaude {
+          name = "yolo-jailed-claude";
+          extraPkgs = [ mcp-nixos ];
+          extraArgs = "--dangerously-skip-permissions";
+        })
         (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg python3 gh mcp-nixos ]; })
         (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; })
         (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; network = true; name = "jailed-julia-net"; })
