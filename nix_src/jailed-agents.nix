@@ -1,6 +1,8 @@
 { pkgs, jail, julia-pkg, claude-pkg, devshellRoot, devshellProjectsFolder, devshellUser, homeDirectory }:
 
 let
+  inherit (pkgs.lib) getExe getExe';
+
   commonPkgs = with pkgs; [
     bashInteractive
     less
@@ -252,13 +254,13 @@ let
   '';
 
   jailNetProxy = pkgs.writeShellScriptBin "jail-net-proxy" ''
-    exec ${pkgs.python3}/bin/python3 ${jailNetProxyPy} "$@"
+    exec ${getExe pkgs.python3} ${jailNetProxyPy} "$@"
   '';
 
   # script ensuring all jailed programs are launched from within the root directory
   assertInDevshell = name: ''
     set -e
-    _cwd="$(${pkgs.coreutils}/bin/pwd -P)"
+    _cwd="$(${getExe' pkgs.coreutils "pwd"} -P)"
     case "$_cwd/" in
       "$(realpath "${devshellRoot}/${devshellProjectsFolder}")/"*) ;;
       *)
@@ -287,13 +289,13 @@ let
         [ (jail.combinators.add-pkg-deps extraPkgs) ]);
       runInner =
         if proxyDomains == null then ''
-          exec ${inner}/bin/${name}-inner "$@"
+          exec ${getExe inner} "$@"
         '' else ''
           _jn_dir="${homeDirectory}/.cache/jail-net"
           _jn_sock="$_jn_dir/${name}.sock"
           mkdir -p "$_jn_dir"
           rm -f "$_jn_sock"
-          ${jailNetProxy}/bin/jail-net-proxy "$_jn_sock" "${pkgs.lib.concatStringsSep "," proxyDomains}" >>"$_jn_dir/${name}-proxy.log" 2>&1 &
+          ${getExe jailNetProxy} "$_jn_sock" "${pkgs.lib.concatStringsSep "," proxyDomains}" >>"$_jn_dir/${name}-proxy.log" 2>&1 &
           _jn_pid=$!
           trap '_jn_st=$?; kill "$_jn_pid" 2>/dev/null; exit $_jn_st' EXIT INT TERM
           _jn_w=0
@@ -306,7 +308,7 @@ let
             _jn_w=$((_jn_w + 1))
             sleep 0.05
           done
-          ${inner}/bin/${name}-inner "$@"
+          ${getExe inner} "$@"
         '';
     in pkgs.writeShellScriptBin name ''
       ${assertInDevshell name}
@@ -321,7 +323,7 @@ let
         socat TCP-LISTEN:${toString proxyPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailProxySock} 2>/dev/null &
         # reach Kaimon's MCP server over the shared unix socket (localhost bypasses the proxy via NO_PROXY)
         socat TCP-LISTEN:${toString mcpPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailMcpSock} 2>/dev/null &
-        exec ${pkgs.lib.getExe claude-pkg} "$@"
+        exec ${getExe claude-pkg} "$@"
       '';
     in makeJailed {
       inherit name extraPkgs;
