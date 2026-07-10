@@ -179,7 +179,10 @@
           extraPkgs = [ mcp-nixos ];
           extraArgs = "--dangerously-skip-permissions";
         })
-        (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg python3 gh mcp-nixos ]; })
+        (jailedAgents.makeJailedShell {
+          extraPkgs = [
+            claude-pkg julia-pkg python3 gh mcp-nixos man less ];
+        })
         (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; })
         (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; network = true; name = "jailed-julia-net"; })
         (jailedAgents.makeJailedKaimon { })
