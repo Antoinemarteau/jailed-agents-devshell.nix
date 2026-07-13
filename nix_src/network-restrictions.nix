@@ -1,4 +1,4 @@
-# Network-restriction plumbing for the jails, factored out of jailed-agents.nix.
+# Network-restriction plumbing for the jails
 #
 # A network-restricted jail keeps jail.nix's default empty netns (kernel-enforced
 # deny-all egress) and reaches the outside world only through a host-side allowlist
@@ -165,11 +165,13 @@ let
   '';
 
 in rec {
-  proxyPort = 3128;                                   # in-jail TCP that HTTP(S)_PROXY targets
-  mcpPort = 2828;                                     # in-jail TCP for Kaimon's MCP server
-  jailProxySock = "/run/jail-net/proxy.sock";         # host proxy socket, bound into the jail here
-  jailKaimonSock = "${jailHomeDirectory}/.cache/kaimon-jail-sock/mcp.sock";
 
+  ################################
+  # Jail network whitelist logic #
+  ################################
+
+  proxyPort = 3128;                                   # in-jail TCP that HTTP(S)_PROXY targets
+  jailProxySock = "/run/jail-net/proxy.sock";         # host proxy socket, bound into the jail here
   jailNetProxy = pkgs.writeShellScriptBin "jail-net-proxy" ''
     exec ${getExe pkgs.python3} ${jailNetProxyPy} "$@"
   '';
@@ -182,17 +184,9 @@ in rec {
     (write-text "/etc/nsswitch.conf" "hosts: files dns\n")
   ];
 
-  # Shared dir for the Claude<->Kaimon MCP socket, kept OUTSIDE .cache/kaimon which
-  # Kaimon wipes on startup.
-  mcpBridgeBinds = with jail.combinators; [
-    (rw-bind "${homeDirectory}/.cache/kaimon-jail-sock" "${jailHomeDirectory}/.cache/kaimon-jail-sock")
-  ];
-
-  # In-jail socat legs (for a jail's launcher). Client legs listen on 127.0.0.1 and
-  # forward to a bound unix socket; the server leg does the reverse for Kaimon.
+  # In-jail socat legs (for a jail's launcher).
+  # Client legs listen on 127.0.0.1 and forward to a bound unix socket.
   proxyClientLeg = "socat TCP-LISTEN:${toString proxyPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailProxySock} 2>/dev/null &";
-  mcpClientLeg = "socat TCP-LISTEN:${toString mcpPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailKaimonSock} 2>/dev/null &";
-  mcpServerLeg = "rm -f ${jailKaimonSock}; socat UNIX-LISTEN:${jailKaimonSock},fork,reuseaddr TCP:127.0.0.1:${toString mcpPort} 2>/dev/null &";
 
   # Options a restricted (proxied) jail needs: point HTTP clients at the in-jail proxy
   # endpoint, keep localhost direct, and supply a CA bundle since /etc/ssl is unbound.
@@ -210,4 +204,21 @@ in rec {
     (set-env "NODE_EXTRA_CA_CERTS" cacertBundle)
     (add-pkg-deps [ pkgs.cacert ])
   ]);
+
+
+  ###################################
+  # Kaimon specific in-jail sockets #
+  ###################################
+
+  kaimonPort = 2828;                                  # in-jail TCP for Kaimon's MCP server
+  jailKaimonSock = "${jailHomeDirectory}/.cache/kaimon-jail-sock/kaimon.sock";
+
+  # Shared dir for the Claude<->Kaimon MCP socket, kept OUTSIDE .cache/kaimon which
+  # Kaimon wipes on startup.
+  kaimonBridgeBinds = with jail.combinators; [
+    (rw-bind "${homeDirectory}/.cache/kaimon-jail-sock" "${jailHomeDirectory}/.cache/kaimon-jail-sock")
+  ];
+
+  kaimonClientLeg = "socat TCP-LISTEN:${toString kaimonPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailKaimonSock} 2>/dev/null &";
+  kaimonServerLeg = "rm -f ${jailKaimonSock}; socat UNIX-LISTEN:${jailKaimonSock},fork,reuseaddr TCP:127.0.0.1:${toString kaimonPort} 2>/dev/null &";
 }

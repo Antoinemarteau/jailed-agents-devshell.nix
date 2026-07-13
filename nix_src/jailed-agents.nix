@@ -27,8 +27,8 @@ let
 
   net = import ./network-restrictions.nix { inherit pkgs jail jailHomeDirectory homeDirectory; };
   inherit (net)
-    jailNetProxy jailProxySock proxyClientLeg mcpClientLeg mcpServerLeg
-    restrictedNetOptions mcpBridgeBinds localhostResolveBinds;
+    jailNetProxy jailProxySock proxyClientLeg kaimonClientLeg kaimonServerLeg
+    restrictedNetOptions kaimonBridgeBinds localhostResolveBinds;
 
   # Build a jail launcher: run the given in-jail socat leg snippets, then exec the program.
   mkLauncher = name: exe: legs: pkgs.writeShellScriptBin name ''
@@ -148,7 +148,7 @@ let
     makeJailed {
       inherit name extraPkgs;
       program = mkLauncher "claude" "${getExe claude-pkg} ${extraArgs}"
-        (pkgs.lib.optional restrictNetwork proxyClientLeg ++ [ mcpClientLeg ]);
+        (pkgs.lib.optional restrictNetwork proxyClientLeg ++ [ kaimonClientLeg ]);
       network = !restrictNetwork;
       proxyDomains = if restrictNetwork then allowedDomains else null;
       preHook = ''
@@ -157,7 +157,7 @@ let
         # shared dir for the Claude<->Kaimon MCP socket
         mkdir -p ${homeDirectory}/.cache/kaimon-jail-sock
       '';
-      options = claudeConfigWriteBinds ++ gitReadBinds ++ mcpBridgeBinds
+      options = claudeConfigWriteBinds ++ gitReadBinds ++ kaimonBridgeBinds
         ++ pkgs.lib.optionals restrictNetwork restrictedNetOptions;
     };
 
@@ -186,7 +186,7 @@ let
   makeJailedKaimon = { extraPkgs ? [], name ? "jailed-kaimon" }:
     makeJailed {
       inherit name extraPkgs;
-      program = mkLauncher "kaimon" "~/.julia/bin/kaimon" [ mcpServerLeg ];
+      program = mkLauncher "kaimon" "~/.julia/bin/kaimon" [ kaimonServerLeg ];
       network = false;
       preHook = ''
         [ -d ${homeDirectory} ]
@@ -197,7 +197,7 @@ let
       options = with jail.combinators;
         juliaDepotWriteBinds ++
         kaimonCacheWriteBinds ++
-        mcpBridgeBinds ++
+        kaimonBridgeBinds ++
         kaimonConfigWriteBinds ++
         localhostResolveBinds ++ [
           (share-ns "pid") # required for Kaimon <-> Julia servers comm.

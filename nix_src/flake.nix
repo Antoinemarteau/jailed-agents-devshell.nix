@@ -172,32 +172,38 @@
         tmux-pkg nixd zsh wget gawkInteractive ps gzip unzip gnutar
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
 
+        # jailed-claude: claude-code with skip permission and restricted network
         (jailedAgents.makeJailedClaude {
           name = "jailed-claude";
-          extraPkgs = [ mcp-nixos ];
+          extraPkgs = [ ];
           extraArgs = "--dangerously-skip-permissions";
           restrictNetwork = true;
           allowedDomains = claudeAllowedDomains;
         })
+        # yolo-jailed-claude: claude-code with skip permission full network access
         (jailedAgents.makeJailedClaude {
           name = "yolo-jailed-claude";
-          extraPkgs = [ mcp-nixos ];
+          extraPkgs = [ ];
           extraArgs = "--dangerously-skip-permissions";
         })
-        (jailedAgents.makeJailedShell {
-          extraPkgs = [
-            claude-pkg julia-pkg python3 gh mcp-nixos man less ];
-        })
+        # jailed-julia: julia with restricted network access
         (jailedAgents.makeJailedJulia {
           extraPkgs = [ python3 ];
           allowedDomains = juliaAllowedDomains;
         })
+        # yolo-jailed-julia: julia with full network access
         (jailedAgents.makeJailedJulia {
           extraPkgs = [ python3 ];
           name = "yolo-jailed-julia";
           restrictNetwork = false;
         })
+        # jailed-kaimon: no network access
         (jailedAgents.makeJailedKaimon { })
+        # jailed-shell: zsh with all dev. tools and all folders other jail have binded for debugging
+        (jailedAgents.makeJailedShell {
+          extraPkgs = [
+            claude-pkg julia-pkg python3 gh man less ];
+        })
 
         newAgentSession
         attachAgentSession
