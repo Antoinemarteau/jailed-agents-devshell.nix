@@ -28,7 +28,7 @@ let
 
   net = import ./network-restrictions.nix { inherit pkgs jail jailHomeDirectory homeDirectory; };
   inherit (net)
-    jailNetProxy jailProxySock proxyClientLeg kaimonClientLeg kaimonServerLeg
+    jailNetProxy mkProxyConfFile jailProxySock proxyClientLeg kaimonClientLeg kaimonServerLeg
     restrictedNetOptions kaimonBridgeBinds localhostResolveBinds;
 
   # Build a jail launcher: run the given in-jail socat leg snippets, then exec the program.
@@ -100,7 +100,7 @@ let
   # for this jail on a unix socket bound in at jailProxySock, and tear it down when
   # the jail exits.
   makeJailed = { name, program, preHook ? "", network ? false, options ? [], extraPkgs ? [],
-                 proxyDomains ? null }:
+                 proxyDomains ? null, proxyHostPort ? null }:
     let
       proxyBinds = pkgs.lib.optionals (proxyDomains != null) [
         (jail.combinators.rw-bind "${homeDirectory}/.cache/jail-net/${name}.sock" jailProxySock)
@@ -119,7 +119,7 @@ let
           _jn_sock="$_jn_dir/${name}.sock"
           mkdir -p "$_jn_dir"
           rm -f "$_jn_sock"
-          ${getExe jailNetProxy} "$_jn_sock" "${pkgs.lib.concatStringsSep "," proxyDomains}" >>"$_jn_dir/${name}-proxy.log" 2>&1 &
+          ${getExe jailNetProxy} "$_jn_sock" "${mkProxyConfFile name proxyHostPort proxyDomains}" "${toString proxyHostPort}" >>"$_jn_dir/${name}-proxy.log" 2>&1 &
           _jn_pid=$!
           trap '_jn_st=$?; kill "$_jn_pid" 2>/dev/null; exit $_jn_st' EXIT INT TERM
           _jn_w=0
@@ -145,9 +145,9 @@ let
   # The Claude<->Kaimon MCP socat bridge is present either way, since Kaimon always
   # runs in its own netns.
   makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude", allowedDomains ? [],
-                       restrictNetwork ? false, extraArgs ? "" }:
+                       restrictNetwork ? false, extraArgs ? "", proxyHostPort ? 8121 }:
     makeJailed {
-      inherit name extraPkgs;
+      inherit name extraPkgs proxyHostPort;
       program = mkLauncher "claude" "${getExe claude-pkg} ${extraArgs}"
         (pkgs.lib.optional restrictNetwork proxyClientLeg ++ [ kaimonClientLeg ]);
       network = !restrictNetwork;
@@ -165,9 +165,9 @@ let
   # restrictNetwork = true : empty netns, internet only via the host allowlist proxy
   #   (e.g. the Julia registries). restrictNetwork = false: full host network.
   makeJailedJulia = { extraPkgs ? [], name ? "jailed-julia", allowedDomains ? [],
-                      restrictNetwork ? true }:
+                      restrictNetwork ? true, proxyHostPort ? 8122 }:
     makeJailed {
-      inherit name extraPkgs;
+      inherit name extraPkgs proxyHostPort;
       program = if restrictNetwork
                 then mkLauncher "julia" (getExe julia-pkg) [ proxyClientLeg ]
                 else julia-pkg;
