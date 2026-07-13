@@ -14,6 +14,7 @@ let
     which
     ripgrep
     gnugrep
+    less
     # gawkInteractive  # awk text processor, not required
     ps              # required by Kaimon
     findutils

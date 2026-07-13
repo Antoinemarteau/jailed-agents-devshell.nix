@@ -174,13 +174,14 @@
         })
         # jailed-julia: julia with restricted network access
         (jailedAgents.makeJailedJulia {
+          name = "jailed-julia";
           extraPkgs = [ python3 ];
           allowedDomains = juliaAllowedDomains;
         })
         # yolo-jailed-julia: julia with full network access
         (jailedAgents.makeJailedJulia {
-          extraPkgs = [ python3 ];
           name = "yolo-jailed-julia";
+          extraPkgs = [ python3 ];
           restrictNetwork = false;
         })
         # jailed-kaimon: no network access
@@ -188,7 +189,7 @@
         # jailed-shell: zsh with all dev. tools and all folders other jail have binded for debugging
         (jailedAgents.makeJailedShell {
           extraPkgs = [
-            claude-pkg julia-pkg python3 gh man less ];
+            claude-pkg julia-pkg python3 gh man ];
         })
 
         newAgentSession
