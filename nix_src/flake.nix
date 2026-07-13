@@ -32,7 +32,7 @@
 
     # Network whitelists
     claudeAllowedDomains = [ "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com" ];
-    juliaAllowedDomains  = [ "julialang.org" "github.com" "githubusercontent.com" ];
+    juliaAllowedDomains  = [ "julialang.org" "julialang.net" "github.com" "githubusercontent.com" ];
 
     # home manager configuration for the interactive devshell home (tmux, zsh, julia,
     # etc.), activated into <devshellRoot>/.hosthome. Kept out of agentshome so no host
