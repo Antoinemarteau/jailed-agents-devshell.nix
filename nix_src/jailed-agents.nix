@@ -76,8 +76,8 @@ let
   nixLdBinds = with jail.combinators; [
     (ro-bind "${pkgs.nix-ld}/libexec/nix-ld" nixLdInterpreterPath)
     (add-pkg-deps [ pkgs.glibc pkgs.stdenv.cc.cc pkgs.zlib ])
-    (fwd-env "NIX_LD")
-    (fwd-env "NIX_LD_LIBRARY_PATH")
+    (set-env "NIX_LD" pkgs.stdenv.cc.bintools.dynamicLinker)
+    (set-env "NIX_LD_LIBRARY_PATH" (pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ]))
   ];
 
   # script ensuring all jailed programs are launched from within the root directory

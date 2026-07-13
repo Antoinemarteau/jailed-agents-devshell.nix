@@ -165,9 +165,6 @@
   in
   {
     devShells.default = pkgs.mkShell {
-      NIX_LD = pkgs.stdenv.cc.bintools.dynamicLinker;
-      NIX_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ];
-
       packages = with pkgs; [
         tmux-pkg nixd zsh wget gawkInteractive ps gzip unzip gnutar
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
