@@ -10,6 +10,12 @@ home-manager.lib.homeManagerConfiguration {
     home.packages = [ nvim-pkg ];
 
     programs = {
+      # necessary to auto load direnv in new tmux panes
+      direnv = {
+        enable = true;
+        nix-direnv.enable = true;
+      };
+
       zsh = {
         enable = true;
 
@@ -72,8 +78,8 @@ home-manager.lib.homeManagerConfiguration {
           # Update the status line every seconds
           set -g status-interval 1
 
-          # Create new window and name it directly
-          bind C command-prompt -p "Name of new window: " "new-window -n '%%'"
+          # Create new window (in the project dir) and name it directly
+          bind C command-prompt -p "Name of new window: " "new-window -c '#{@proj}' -n '%%'"
 
           # Cd to current directory when spliting window
           bind '"' split-window -v -c "#{pane_current_path}"

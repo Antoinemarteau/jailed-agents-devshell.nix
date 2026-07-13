@@ -188,6 +188,9 @@ This development environment gives Claude strong permission
 arbitrary code from files added in these folders (e.g. `git` with .git/ hooks)
 should not be used within them.
 
+Relatedly, only ever `direnv allow` the top-level `agentshome/.envrc`, never
+allow an `.envrc` under `projects/`.
+
 As a guard against that mistake, a list of common host dev tools — `git`, `gh`,
 `julia`, `claude`, `kaimon`, `make`, `python`, `pip`, `uv`, `conda`, `node`,
 `npm`, `docker`, `apt` (see `guardedHostTools` in `flake.nix`) — is shadowed
