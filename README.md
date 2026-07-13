@@ -1,12 +1,17 @@
 # ai-agent-nix-sandboxing
 
-A reproducible agentic development environment for Julia projects on Linux,
-based on nix, tmux and direnv. Currently, it provides the Claude and Kaimon CLI
-as well as Julia REPL, sandboxed in different Linux "user namespaces".
+A reproducible agentic development environment for Julia projects on Linux.
 
-This repository facilitates using coding agents in a reproducible, personalized
-and safer manner, on local machine or remotely controlled via ssh.
-It has the following structure:
+
+The project leverages nix, tmux and direnv to facilitate using coding agents in
+a reproducible, personalized and safer manner, on local machine or remotely via
+ssh.
+
+Currently, this repository provides the Claude and Kaimon CLI as well as Julia
+REPL, sandboxed in different Linux "user namespaces" via
+[jail-nix](https://alexdav.id/projects/jail-nix/) (that is backed by
+[bubblewrap](https://github.com/containers/bubblewrap)). It has the following
+structure:
 ```sh
 .   # everyday development folders
 ├── agentshome/      # single agent-writeable root (agent data + projects)
@@ -26,10 +31,11 @@ It has the following structure:
     └── .config/
        └── tmux/default-session.conf # user-editable tmux session layout
 ```
-`nix` and `direnv` are the only software needed already installed. The
+`nix` and `direnv` are the only software needed to be pre-installed. The
 objective of this repo is that everything else is automatically installed in a
-reproducible way upon cloning it, except what's in `.julia` and `.claude`
-folders config and your projects, that you populate yourself.
+reproducible way upon cloning it. You'll still have to personalize `.julia` and
+`.claude` folders and optionally other software configuration (tmux, shell,
+etc.).
 
 The sandboxes can be run from an unprivileged environment (although root
 privilege is needed to install `nix` and `direnv`). The sandboxed coding tools
@@ -48,11 +54,19 @@ Before starting, you will need [`nix`](https://nixos.org/download/) and
 optionally [`direnv`](https://direnv.net/) (recommended) installed on your
 machine.
 
+If [`nix-direnv`](https://github.com/nix-community/nix-direnv) is not installed
+on the machine, install it at user level for faster cached reloads (optional
+but recommended)
+```bash
+nix profile install nixpkgs#nix-direnv
+echo 'source $HOME/.nix-profile/share/nix-direnv/direnvrc' >> ~/.config/direnv/direnvrc
+```
+
 Clone the repository. Change the hard-coded
 ```nix
 devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
 ```
-variable in the `nix_src/flake.nix` file, to the actual absolute path the repo.
+variable in the `nix_src/flake.nix` file, to the actual absolute path of the repo.
 
 Then enable `direnv` from within `agentshome/`
 ```bash
@@ -61,13 +75,6 @@ direnv allow
 ```
 Entering any project under `agentshome/projects/` now puts the sandboxed tools on
 `PATH` automatically.
-
-If `nix-direnv` is not installed on the machine, install it at user level for
-faster cached reloads (optional but recommended)
-```bash
-nix profile install nixpkgs#nix-direnv
-echo 'source $HOME/.nix-profile/share/nix-direnv/direnvrc' >> ~/.config/direnv/direnvrc
-```
 
 ### Ubuntu setup
 
@@ -112,16 +119,14 @@ This creates a tmux session with 4 windows:
 
 This default session can be personalized by modifying `.hosthome/.config/tmux/default-session.conf`.
 
-On the first session you ever create, `.julia` and other configs are empty, so you need to:
-- Go to the repl window and wait Kaimon install to be finished.
-- Go to kaimon window and launch `jailed-kaimon` to setup it, choose "Lax" mode (filtering who acceses Kaimon is pointless since it is sandboxed)
-- Exit Claude, run `claude-connect-kaimon` from the shell to connect the MCP
-- launch `jailed-claude` again (or `yolo-jailed-claude`) and login
+On the first session you ever create, `agentshome/.julia/` and other configs are empty, so you need to:
+- Go to the repl window and wait for the Kaimon install to finish,
+- Go to kaimon window and launch `jailed-kaimon` to set it up, choose "Lax" mode (filtering who accesses Kaimon is pointless since it is sandboxed),
+- Exit Claude, run `claude-connect-kaimon` from the shell to connect the MCP,
+- launch `jailed-claude` again (or `yolo-jailed-claude`) and login.
+
 Claude should then be ready to pass Kaimon's `usage_quiz` and read `usage_instructions`.
 By default, Claude's login info should be stored in `agentshome/.claude/.credentials.json`.
-
-On remote machine, `yolo-jailed-claude` can be used, it is a directory jailed
-Claude with unrestricted network access.
 
 To return to the development session later, do not re-run `new_agent_session`
 (it kills and recreates the session and all existing agents), but
@@ -139,11 +144,43 @@ since the session is named after the folder.\
 The non-default tmux socket `julia_agents` is used because the host tmux config
 is overwritten with one provided from nix, for use on remote machine.
 
-Only one Kaimon server/CLI can be used simultaneously, so you can kill the
-first window if you launch a new tmux session (via `new_agent_session`) in
-another sub-project.
+The difference between `jailed-[claude,julia]` and the `yolo-...` version is
+that the former is network restricted to the whitelists:
+```nix
+claudeAllowedDomains = [
+    "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com"
+];
+juliaAllowedDomains  = [
+    "julialang.org" "julialang.net" "github.com" "githubusercontent.com"
+];
+```
+using [tinyproxy](https://tinyproxy.github.io/).
 
-## Security warning
+
+### Git identity and GitHub token
+
+To give a git identity for the agent, set name and email in
+`agentshome/.gitconfig`. If you want it to pull/push, create
+`agentshome/.git-credentials` with a GitHub [fine-grained Personal Access Token
+(PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token):
+```bash
+echo 'https://x-access-token:github_pat_{YOUR-TOKEN-HERE}@github.com' > agentshome/.git-credentials
+chmod 600 agentshome/.git-credentials
+```
+Make sure to not commit .git-credentials to git.
+
+
+## Security notes
+
+This project tries to provide security features mostly equivalent to those that
+[agent-sandbox.nix
+details](https://github.com/archie-judd/agent-sandbox.nix#security) (read them,
+it's very informative), with the following differences:
+- the agent cannot edit its config,
+- everything we here provide to the sandbox is within `agentshome/`, no host home files are forwarded by default, `/tmp/` is not shared with the host,
+- we provide the read-write access to Claude credentials, and read access to the ssh keys, assuming that agent specific limited secrets are used,
+- we don't forward the whole nix store to the sandboxes, only that of the provided packages.
+
 
 This development environment gives Claude strong permission
 (--dangerously-skip-permisson) by default. Treat the whole `agentshome/` tree
@@ -160,18 +197,6 @@ shadowed, and absolute paths (`/usr/bin/git`) or tools that embed git (libgit2,
 `gh`) bypass it.
 
 
-### Git identity and GitHub token
-
-To give a git identity for the agent, set name and email in
-`agentshome/.gitconfig`. If you want it to pull/push, create
-`agentshome/.git-credentials` with a GitHub [fine-grained Personal Access Token
-(PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token):
-```bash
-echo 'https://x-access-token:github_pat_{YOUR-TOKEN-HERE}@github.com' > agentshome/.git-credentials
-chmod 600 agentshome/.git-credentials
-```
-Make sure to not commit .git-credentials to git.
-
 ## Technical details
 
 The tool is developed using nix and only requires installing the [nix package
@@ -181,6 +206,6 @@ namespaces are created by
 
 The design is based on this [blog from Anderson. J](https://dev.to/andersonjoseph/how-i-run-llm-agents-in-a-secure-nix-sandbox-1899).
 
-TODO folder architechture
-
 Written with the help of Claude code.
+
+TODO: other similar tools
