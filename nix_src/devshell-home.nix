@@ -8,7 +8,7 @@
 # straight into the jail). Keeping one module definition means both stay in sync.
 home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
-  modules = [({ config, ... }: {
+  modules = [({ config, lib, ... }: {
     home.username = devshellUser;
     home.homeDirectory = homeDirectory;
     home.stateVersion = "25.11";
@@ -33,7 +33,9 @@ home-manager.lib.homeManagerConfiguration {
           size = 50000;
         };
 
-        sessionVariables.AGNOSTER_DIR_BG = if forHost then "208" else "blue";
+        initContent = lib.mkOrder 700 ''
+          export AGNOSTER_DIR_BG=${if forHost then "208" else "blue"}
+        '';
 
         oh-my-zsh = {
           enable = true;
@@ -73,6 +75,7 @@ home-manager.lib.homeManagerConfiguration {
 
         extraConfig = ''
           set-environment -g ZDOTDIR ${config.xdg.configHome}/zsh
+          set -g default-terminal "tmux-256color"
           set -g mouse on
 
           # 2x C-t goes back and fourth between most recent windows
