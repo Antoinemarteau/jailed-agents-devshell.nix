@@ -19,148 +19,16 @@
       config.allowUnfree = true;
     };
 
-    # Variable required to be set to the repository root, containing the current file
+    ###########################################################################
+    # Main flake parameters #
+    ###########################################################################
+
+    # NECESSARY TO SET to the repository root, containing the current file
     devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
-    # Variables that can be optionally modified
-    devshellUser           = "agents";         # username in the jail
-    devshellHomeFolder     = "agentshome";     # host dir holding the jail-bound agent data
-    devshellHostHomeFolder = ".hosthome";       # host dir for the interactive devshell home (zsh/tmux/nvim)
-    devshellProjectsFolder = "${devshellHomeFolder}/projects"; # host dir for the coding projects (under the agent home)
-    agentHomeDirectory = "${devshellRoot}/${devshellHomeFolder}";
-    jailHomeDirectory      = "/home/${devshellUser}"; # $HOME as seen from inside every jail
-    tmuxServer             = "julia_agents";   # tmux server name
-    tmuxSessionFile        = "${devshellRoot}/${devshellHostHomeFolder}/.config/tmux/default-session.conf"; # user-editable window layout
 
     # Network whitelists
     claudeAllowedDomains = [ "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com" ];
     juliaAllowedDomains  = [ "julialang.org" "julialang.net" "github.com" "githubusercontent.com" ];
-
-    # devshell-home.nix defines the zsh config (oh-my-zsh, aliases, history) once and is
-    # instantiated twice: `hostHomeManager` also carries tmux + direnv and is activated for
-    # real into <devshellRoot>/.hosthome (kept out of agentshome so no host dotfiles live in
-    # a tree bound into the jails); `jailShellHomeManager` is never activated — only its
-    # build-time `home-files`/`xdg.configFile` outputs are consumed, ro-bound straight into
-    # jailed-shell (see jailed-agents.nix).
-    hostHomeManager = import ./devshell-home.nix {
-      inherit pkgs home-manager devshellUser;
-      homeDirectory = devshellRoot + "/" + devshellHostHomeFolder;
-      forHost = true;
-    };
-    jailShellHomeManager = import ./devshell-home.nix {
-      inherit pkgs home-manager devshellUser;
-      homeDirectory = jailHomeDirectory;
-    };
-    hostHomeDirectory = hostHomeManager.config.home.homeDirectory;
-    configFile = hostHomeManager.config.xdg.configFile;
-    tmux-pkg = hostHomeManager.config.programs.tmux.package;
-    zshHomeFiles = jailShellHomeManager.config.home-files;
-
-    jail = jail-nix.lib.init pkgs;
-    julia-pkg = pkgs.julia-bin;
-    claude-pkg = llm-agents.packages.${system}.claude-code;
-    nvim-pkg = nixconfig.packages.${system}.default;
-
-    jailedAgents = import ./jailed-agents.nix {
-      inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder devshellUser
-              jailHomeDirectory zshHomeFiles;
-      homeDirectory = agentHomeDirectory;
-    };
-
-    # Launch (or reset) a tmux development session for the current project. This is the
-    # explicit entry point: entering the devShell (via direnv or `nix develop`) only puts
-    # the tools on PATH — running this builds and attaches the session.
-    newAgentSession = pkgs.writeShellScriptBin "new_agent_session" ''
-      # Require running from within the projects dir, where the jailed agents operate.
-      _projects="${devshellRoot}/${devshellProjectsFolder}"
-      if [ ! -d "$_projects" ]; then
-        echo "ERROR: devshellRoot in flake.nix is '${devshellRoot}'," >&2
-        echo "  but its projects directory ($_projects) does not exist." >&2
-        echo "  set devshellRoot to this repo's absolute path in flake.nix, then reload the env." >&2
-        exit 1
-      fi
-      _cwd="$(pwd -P)"
-      case "$_cwd/" in
-        "$(realpath "$_projects")/"*) ;;
-        *)
-          echo "ERROR: new_agent_session must be run from within $_projects" >&2
-          echo "  current: $_cwd" >&2
-          exit 1
-          ;;
-      esac
-      _session="$(basename "$_cwd")"
-      _session="''${_session//[^a-zA-Z0-9_-]/_}"
-
-      # The session windows launch jailed agents from PATH; ensure the devShell env is loaded.
-      if ! command -v jailed-kaimon >/dev/null 2>&1; then
-        echo "ERROR: devShell tools not on PATH — enter the env first (direnv, or 'nix develop ${devshellRoot}/nix_src')" >&2
-        exit 1
-      fi
-
-      # Refuse to run inside any other tmux session — new-session cannot attach when nested.
-      if [ -n "''${TMUX:-}" ]; then
-        echo "ERROR: cannot start the tmux development session within a tmux session — detach first (Ctrl-b d)" >&2
-        exit 1
-      fi
-
-      # Activate home-manager config into the .hosthome dir (never touches real $HOME).
-      HOME=${hostHomeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
-        ${hostHomeManager.activationPackage}/activate
-
-      # Create or reset the tmux session, then apply the user-editable window
-      # layout. @proj is the project dir.
-      _layout="${tmuxSessionFile}"
-      if [ ! -f "$_layout" ]; then
-        echo "ERROR: tmux session file not found: $_layout" >&2
-        exit 1
-      fi
-      tmux -L ${tmuxServer} kill-session -t "=$_session" 2>/dev/null || true
-      tmux -L ${tmuxServer} -f ${configFile."tmux/tmux.conf".source} new-session -d -s "$_session" -c "$_cwd"
-      tmux -L ${tmuxServer} set-option  -t "$_session" @proj "$_cwd"
-      tmux -L ${tmuxServer} source-file -t "$_session:" "$_layout"
-      tmux -L ${tmuxServer} attach-session -t "$_session"
-    '';
-
-    attachAgentSession = pkgs.writeShellScriptBin "attach_agent_session" ''
-      _session="$(basename "$(pwd -P)")"
-      _session="''${_session//[^a-zA-Z0-9_-]/_}"
-
-      # Refuse to attach inside another tmux session — attach cannot nest.
-      if [ -n "''${TMUX:-}" ]; then
-        echo "ERROR: cannot attach within a tmux session — detach first (Ctrl-b d)" >&2
-        exit 1
-      fi
-
-      if ! tmux -L ${tmuxServer} has-session -t "=$_session" 2>/dev/null; then
-        echo "ERROR: no tmux session '$_session' for this folder — start one with new_agent_session" >&2
-        exit 1
-      fi
-      tmux -L ${tmuxServer} attach-session -t "=$_session"
-    '';
-
-    # Shadow a host dev tool inside the agent-writable tree (agentHomeDirectory, which
-    # holds the jail-bound agent data and the projects). The interactive devshell home
-    # lives in a separate tree (.hosthome/), so its startup files can never become
-    # agent-writable. This is a footgun-reducer, NOT a security boundary: absolute paths
-    # (/usr/bin/git) and tools that use git without exec'ing it (libgit2, gh's internal
-    # git) bypass it.
-    guardHostTool = name: pkgs.writeShellScriptBin name ''
-      _cwd="$(${pkgs.coreutils}/bin/pwd -P)/"
-      case "$_cwd" in
-        "$(${pkgs.coreutils}/bin/realpath -m "${agentHomeDirectory}")/"*)
-          echo "⛔ '${name}' is disabled here: this tree is written by the sandboxed agents." >&2
-          echo "   Running host '${name}' could execute agent-planted hooks/config on your host." >&2
-          echo "   Use the jailed tools, or run '${name}' from inside 'jailed-shell', or from outside the sandbox after reviewing the diff." >&2
-          exit 1 ;;
-      esac
-      # Outside the agent-writable tree: hand off to the real host tool (skip this wrapper).
-      readarray -t _paths < <(type -aP ${name})
-      _real="''${_paths[1]:-}"
-      if [ -z "$_real" ]; then
-        echo "${name}: no host '${name}' found on PATH" >&2
-        exit 127
-      fi
-      exec "$_real" "$@"
-    '';
 
     guardedHostTools = [
       "git" "gh" "julia" "claude" "kaimon"          # the sandboxed workflow's tools
@@ -168,47 +36,240 @@
       "uv" "conda" "docker" "apt"
     ];
 
+
+    ###########################################################################
+    # Directory architecture related variables #
+    ###########################################################################
+
+    devshellUser           = "agents";         # username in the jail
+    devshellHomeFolder     = "agentshome";     # host dir holding the jail-bound agent data
+    devshellHostHomeFolder = ".hosthome";       # host dir for the interactive devshell home (zsh/tmux/nvim)
+    agentHomeDirectory = "${devshellRoot}/${devshellHomeFolder}";
+    jailHomeDirectory      = "/home/${devshellUser}"; # $HOME as seen from inside every jail
+
+    ###########################################################################
+    # jail-nix library helpers
+    ###########################################################################
+
+    jail = jail-nix.lib.init pkgs;
+
+    jailedAgents = import ./jailed-agents.nix {
+      inherit pkgs jail home-manager devshellRoot devshellHomeFolder
+              devshellHostHomeFolder devshellUser jailHomeDirectory;
+      homeDirectory = agentHomeDirectory;
+    };
+    inherit (jailedAgents)
+      makeJailed gitReadBinds nixLdBinds hostHomeManager
+      newAgentSession attachAgentSession guardHostTool;
+
+    tmux-pkg = hostHomeManager.config.programs.tmux.package;
+
+
+    ###########################################################################
+    # jailed-kaimon:                                                          #
+    ###########################################################################
+
+    # The Claude<->Kaimon MCP channel is bridged the same way over a shared unix
+    # socket, so localhost:2828 keeps working once both jails leave the host netns.
+
+    kaimonPort = 2828; # in-jail TCP for Kaimon's MCP server
+    jailKaimonSock = "${jailHomeDirectory}/.cache/kaimon-jail-sock/kaimon.sock";
+
+    # Shared dir for the Claude<->Kaimon MCP socket
+    kaimonBridgeBinds = with jail.combinators; [
+      (rw-bind "${agentHomeDirectory}/.cache/kaimon-jail-sock" "${jailHomeDirectory}/.cache/kaimon-jail-sock")
+    ];
+
+    kaimonClientLeg = "socat TCP-LISTEN:${toString kaimonPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailKaimonSock} 2>/dev/null &";
+    kaimonServerLeg = "rm -f ${jailKaimonSock}; socat UNIX-LISTEN:${jailKaimonSock},fork,reuseaddr TCP:127.0.0.1:${toString kaimonPort} 2>/dev/null &";
+
+    # for Kaimon <-> Julia communication
+    kaimonCacheWriteBinds = with jail.combinators; [
+      (rw-bind "${agentHomeDirectory}/.cache/kaimon" "${jailHomeDirectory}/.cache/kaimon")
+    ];
+
+    kaimonConfigWriteBinds = with jail.combinators; [
+      (rw-bind "${agentHomeDirectory}/.config/kaimon" "${jailHomeDirectory}/.config/kaimon")
+    ];
+
+    juliaDepotReadBinds = with jail.combinators; [
+      (ro-bind "${agentHomeDirectory}/.julia" "${jailHomeDirectory}/.julia")
+    ];
+
+    makeJailedKaimon = { extraPkgs ? [], name ? "jailed-kaimon" }:
+      makeJailed {
+        inherit name extraPkgs;
+        exe = "~/.julia/bin/kaimon";
+        socatLegs = [ kaimonServerLeg ];
+        network = false;
+        preHook = ''
+          [ -d ${agentHomeDirectory} ]
+          mkdir -p ${agentHomeDirectory}/.cache/kaimon/sock
+          mkdir -p ${agentHomeDirectory}/.cache/kaimon-jail-sock
+          mkdir -p ${agentHomeDirectory}/.config/kaimon
+        '';
+        options = with jail.combinators;
+          juliaDepotReadBinds ++
+          kaimonCacheWriteBinds ++
+          kaimonBridgeBinds ++
+          kaimonConfigWriteBinds ++ [
+            (add-pkg-deps [ julia-pkg ])
+          ];
+      };
+
+
+    ###########################################################################
+    # jailed-claude
+    ###########################################################################
+
+    claude-pkg = llm-agents.packages.${system}.claude-code;
+
+    claudeConfigWriteBinds = with jail.combinators; [
+      (rw-bind "${agentHomeDirectory}/.claude" "${jailHomeDirectory}/.claude")
+      (rw-bind "${agentHomeDirectory}/.claude.json" "${jailHomeDirectory}/.claude.json")
+    ];
+
+    # restrictNetwork = true : empty netns, internet only via the host allowlist proxy.
+    # restrictNetwork = false: full host network (for use on an isolated remote server).
+    # The Claude<->Kaimon MCP socat bridge is present either way, since Kaimon always
+    # runs in its own netns.
+    makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude", allowedDomains ? [],
+                         restrictNetwork ? false, extraArgs ? "" }:
+      makeJailed {
+        inherit name extraPkgs restrictNetwork allowedDomains extraArgs;
+        exe = claude-pkg;
+        socatLegs = [ kaimonClientLeg ];
+        network = !restrictNetwork;
+        preHook = ''
+          # makes sure a writable and host persisted .claude.json file exists
+          [ -f ${agentHomeDirectory}/.claude.json ] || echo '{}' > ${agentHomeDirectory}/.claude.json
+          # shared dir for the Claude<->Kaimon MCP socket
+          mkdir -p ${agentHomeDirectory}/.cache/kaimon-jail-sock
+        '';
+        options = claudeConfigWriteBinds ++ gitReadBinds ++ kaimonBridgeBinds;
+      };
+
+
+    ###########################################################################
+    # jailed-julia
+    ###########################################################################
+
+    julia-pkg = pkgs.julia-bin;
+
+    juliaDepotWriteBinds = with jail.combinators; [
+      (rw-bind "${agentHomeDirectory}/.julia" "${jailHomeDirectory}/.julia")
+    ];
+
+    # restrictNetwork = true : empty netns, internet only via the host allowlist proxy
+    #   (e.g. the Julia registries). restrictNetwork = false: full host network.
+    makeJailedJulia = { extraPkgs ? [], name ? "jailed-julia", allowedDomains ? [],
+                        restrictNetwork ? false }:
+      makeJailed {
+        inherit name extraPkgs restrictNetwork allowedDomains;
+        exe = julia-pkg;
+        network = !restrictNetwork;
+        preHook = ''
+          [ -d ${agentHomeDirectory} ]
+          mkdir -p ${agentHomeDirectory}/.cache/kaimon/sock
+        '';
+        options = juliaDepotWriteBinds ++ kaimonCacheWriteBinds ++ nixLdBinds;
+      };
+
+
+    ###########################################################################
+    # jailed-shell
+    # for safely working within projects/ and debugging other jails
+    ###########################################################################
+
+    nvim-pkg = nixconfig.packages.${system}.default;
+
+    # devshell-home.nix's zsh config (oh-my-zsh, aliases, history), instantiated for
+    # jailed-shell: never activated — only its build-time `home-files` output is
+    # consumed, ro-bound straight into the jail below.
+    jailShellHomeManager = import ./devshell-home.nix {
+      inherit pkgs home-manager devshellUser;
+      homeDirectory = jailHomeDirectory;
+    };
+    zshHomeFiles = jailShellHomeManager.config.home-files;
+
+    makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
+      makeJailed {
+        inherit name extraPkgs;
+        exe = pkgs.zsh;
+        network = true;
+        preHook = ''
+          # makes sure a writable and host persisted .claude.json file exists
+          [ -f ${agentHomeDirectory}/.claude.json ] || echo '{}' > ${agentHomeDirectory}/.claude.json
+          # similar with Kaimon config folders
+          mkdir -p ${agentHomeDirectory}/.cache/kaimon/sock
+          mkdir -p ${agentHomeDirectory}/.config/kaimon
+          # persistent zsh history, shared across jailed-shell invocations
+          mkdir -p ${agentHomeDirectory}/.local/state
+        '';
+        options = with jail.combinators;
+          claudeConfigWriteBinds ++
+          gitReadBinds ++
+          juliaDepotWriteBinds ++
+          kaimonConfigWriteBinds ++
+          kaimonCacheWriteBinds ++
+          nixLdBinds ++ [
+            (ro-bind "${zshHomeFiles}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
+            (rw-bind "${agentHomeDirectory}/.local/state" "${jailHomeDirectory}/.local/state") # zsh history
+            (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
+            (set-env "LANG" "C.UTF-8")
+            (set-env "TERMINFO_DIRS" "${pkgs.ncurses}/share/terminfo")
+            (add-pkg-deps [ pkgs.zsh pkgs.ncurses zshHomeFiles ])
+          ];
+      };
+
   in
   {
     devShells.default = pkgs.mkShell {
       packages = with pkgs; [
+
         tmux-pkg zsh
         newAgentSession
         attachAgentSession
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
 
         # jailed-claude: claude-code with skip permission and restricted network
-        (jailedAgents.makeJailedClaude {
+        (makeJailedClaude {
           name = "jailed-claude";
           extraPkgs = [ ];
           extraArgs = "--dangerously-skip-permissions";
           restrictNetwork = true;
           allowedDomains = claudeAllowedDomains;
         })
+
         # yolo-jailed-claude: claude-code with skip permission full network access
-        (jailedAgents.makeJailedClaude {
+        (makeJailedClaude {
           name = "yolo-jailed-claude";
           extraPkgs = [ ];
           extraArgs = "--dangerously-skip-permissions";
         })
+
         # jailed-julia: julia with restricted network access
-        (jailedAgents.makeJailedJulia {
+        (makeJailedJulia {
           name = "jailed-julia";
           extraPkgs = [ python3 ];
+          restrictNetwork = true;
           allowedDomains = juliaAllowedDomains;
         })
+
         # yolo-jailed-julia: julia with full network access
-        (jailedAgents.makeJailedJulia {
+        (makeJailedJulia {
           name = "yolo-jailed-julia";
           extraPkgs = [ python3 ];
-          restrictNetwork = false;
         })
+
         # jailed-kaimon: no network access
-        (jailedAgents.makeJailedKaimon { })
+        (makeJailedKaimon { })
+
         # jailed-shell: zsh with all dev. tools and all folders other jail have binded for debugging
-        (jailedAgents.makeJailedShell {
+        (makeJailedShell {
           extraPkgs = [
-            claude-pkg julia-pkg python3 gh man nvim-pkg ];
+            nvim-pkg claude-pkg julia-pkg python3 gh man gzip unzip gnutar
+          ];
         })
       ]
       ++ builtins.map guardHostTool guardedHostTools;

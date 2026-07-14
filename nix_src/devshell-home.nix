@@ -14,6 +14,7 @@ home-manager.lib.homeManagerConfiguration {
     home.stateVersion = "25.11";
 
     programs = {
+      # Program configurations available to both host development sell and jailed-shell
       zsh = {
         enable = true;
 
@@ -44,6 +45,9 @@ home-manager.lib.homeManagerConfiguration {
         };
       };
     } // pkgs.lib.optionalAttrs forHost {
+
+      # Program configurations only for the development sell of the host
+
       # necessary to auto load direnv in new tmux panes
       direnv = {
         enable = true;
