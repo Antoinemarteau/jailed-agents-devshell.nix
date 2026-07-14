@@ -27,6 +27,7 @@
     devshellHostHomeFolder = ".hosthome";       # host dir for the interactive devshell home (zsh/tmux/nvim)
     devshellProjectsFolder = "${devshellHomeFolder}/projects"; # host dir for the coding projects (under the agent home)
     agentHomeDirectory = "${devshellRoot}/${devshellHomeFolder}";
+    jailHomeDirectory      = "/home/${devshellUser}"; # $HOME as seen from inside every jail
     tmuxServer             = "julia_agents";   # tmux server name
     tmuxSessionFile        = "${devshellRoot}/${devshellHostHomeFolder}/.config/tmux/default-session.conf"; # user-editable window layout
 
@@ -34,20 +35,36 @@
     claudeAllowedDomains = [ "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com" ];
     juliaAllowedDomains  = [ "julialang.org" "julialang.net" "github.com" "githubusercontent.com" ];
 
-    # home manager configuration for the interactive devshell home (tmux, zsh, julia,
-    # etc.), activated into <devshellRoot>/.hosthome. Kept out of agentshome so no host
-    # dotfiles live in a tree that is bound into the jails.
-    devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHostHomeFolder nvim-pkg; };
-    hostHomeDirectory = devshellHomeManager.config.home.homeDirectory;
-    configFile = devshellHomeManager.config.xdg.configFile;
-    tmux-pkg = devshellHomeManager.config.programs.tmux.package;
+    # devshell-home.nix defines the zsh config (oh-my-zsh, aliases, history) once and is
+    # instantiated twice: `hostHomeManager` also carries tmux + direnv and is activated for
+    # real into <devshellRoot>/.hosthome (kept out of agentshome so no host dotfiles live in
+    # a tree bound into the jails); `jailShellHomeManager` is never activated — only its
+    # build-time `home-files`/`xdg.configFile` outputs are consumed, ro-bound straight into
+    # jailed-shell (see jailed-agents.nix).
+    hostHomeManager = import ./devshell-home.nix {
+      inherit pkgs home-manager devshellUser;
+      homeDirectory = devshellRoot + "/" + devshellHostHomeFolder;
+      forHost = true;
+    };
+    jailShellHomeManager = import ./devshell-home.nix {
+      inherit pkgs home-manager devshellUser;
+      homeDirectory = jailHomeDirectory;
+    };
+    hostHomeDirectory = hostHomeManager.config.home.homeDirectory;
+    configFile = hostHomeManager.config.xdg.configFile;
+    tmux-pkg = hostHomeManager.config.programs.tmux.package;
+    zshHomeFiles = jailShellHomeManager.config.home-files;
 
     jail = jail-nix.lib.init pkgs;
     julia-pkg = pkgs.julia-bin;
     claude-pkg = llm-agents.packages.${system}.claude-code;
     nvim-pkg = nixconfig.packages.${system}.default;
 
-    jailedAgents = import ./jailed-agents.nix { inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder devshellUser; homeDirectory = agentHomeDirectory; };
+    jailedAgents = import ./jailed-agents.nix {
+      inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder devshellUser
+              jailHomeDirectory zshHomeFiles;
+      homeDirectory = agentHomeDirectory;
+    };
 
     # Launch (or reset) a tmux development session for the current project. This is the
     # explicit entry point: entering the devShell (via direnv or `nix develop`) only puts
@@ -87,7 +104,7 @@
 
       # Activate home-manager config into the .hosthome dir (never touches real $HOME).
       HOME=${hostHomeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
-        ${devshellHomeManager.activationPackage}/activate
+        ${hostHomeManager.activationPackage}/activate
 
       # Create or reset the tmux session, then apply the user-editable window
       # layout. @proj is the project dir.
@@ -156,6 +173,8 @@
     devShells.default = pkgs.mkShell {
       packages = with pkgs; [
         tmux-pkg zsh
+        newAgentSession
+        attachAgentSession
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
 
         # jailed-claude: claude-code with skip permission and restricted network
@@ -189,11 +208,8 @@
         # jailed-shell: zsh with all dev. tools and all folders other jail have binded for debugging
         (jailedAgents.makeJailedShell {
           extraPkgs = [
-            claude-pkg julia-pkg python3 gh man ];
+            claude-pkg julia-pkg python3 gh man nvim-pkg ];
         })
-
-        newAgentSession
-        attachAgentSession
       ]
       ++ builtins.map guardHostTool guardedHostTools;
     };

@@ -1,21 +1,19 @@
-{ pkgs, home-manager, devshellRoot, devshellUser, devshellHostHomeFolder, nvim-pkg }:
+{ pkgs, home-manager, devshellUser, homeDirectory, forHost ? false }:
 
+# Shared home-manager module for the zsh config (oh-my-zsh, aliases, history),
+# instantiated twice: once for `.hosthome` (forHost = true, activated for real on
+# the host, also carries tmux + direnv for the interactive panes), and once for
+# jailed-shell (forHost = false, never activated — only `config.home-files` and
+# `config.xdg.configFile` are consumed, as build-time nix-store artifacts bound
+# straight into the jail). Keeping one module definition means both stay in sync.
 home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
   modules = [({ config, ... }: {
     home.username = devshellUser;
-    home.homeDirectory = devshellRoot + "/" + devshellHostHomeFolder;
+    home.homeDirectory = homeDirectory;
     home.stateVersion = "25.11";
 
-    home.packages = [ nvim-pkg ];
-
     programs = {
-      # necessary to auto load direnv in new tmux panes
-      direnv = {
-        enable = true;
-        nix-direnv.enable = true;
-      };
-
       zsh = {
         enable = true;
 
@@ -35,11 +33,19 @@ home-manager.lib.homeManagerConfiguration {
           size = 50000;
         };
 
+        sessionVariables.AGNOSTER_DIR_BG = if forHost then "208" else "blue";
+
         oh-my-zsh = {
           enable = true;
           plugins = [ "git" ];
           theme = "agnoster";
         };
+      };
+    } // pkgs.lib.optionalAttrs forHost {
+      # necessary to auto load direnv in new tmux panes
+      direnv = {
+        enable = true;
+        nix-direnv.enable = true;
       };
 
       tmux = {

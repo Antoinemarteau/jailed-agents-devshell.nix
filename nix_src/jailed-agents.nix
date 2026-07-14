@@ -1,4 +1,5 @@
-{ pkgs, jail, julia-pkg, claude-pkg, devshellRoot, devshellProjectsFolder, devshellUser, homeDirectory }:
+{ pkgs, jail, julia-pkg, claude-pkg, devshellRoot, devshellProjectsFolder, devshellUser,
+  homeDirectory, jailHomeDirectory, zshHomeFiles }:
 
 let
   inherit (pkgs.lib) getExe getExe';
@@ -23,8 +24,6 @@ let
     # gnutar
     diffutils
   ];
-
-  jailHomeDirectory = "/home/${devshellUser}";
 
   net = import ./network-restrictions.nix { inherit pkgs jail jailHomeDirectory homeDirectory; };
   inherit (net)
@@ -221,6 +220,10 @@ let
         ];
     };
 
+  zshHistoryWriteBinds = with jail.combinators; [
+    (rw-bind "${homeDirectory}/.local/state" "${jailHomeDirectory}/.local/state")
+  ];
+
   # This is for working within project folders and debugging the jails
   makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
     makeJailed {
@@ -233,6 +236,8 @@ let
         # similar with Kaimon config folders
         mkdir -p ${homeDirectory}/.cache/kaimon/sock
         mkdir -p ${homeDirectory}/.config/kaimon
+        # persistent zsh history, shared across jailed-shell invocations
+        mkdir -p ${homeDirectory}/.local/state
       '';
       options = with jail.combinators;
         claudeConfigWriteBinds ++
@@ -240,12 +245,13 @@ let
         juliaDepotWriteBinds ++
         kaimonConfigWriteBinds ++
         kaimonCacheWriteBinds ++
-        nixLdBinds ++ [
-          (ro-bind "${homeDirectory}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
+        nixLdBinds ++
+        zshHistoryWriteBinds ++ [
+          (ro-bind "${zshHomeFiles}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
           (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
           (set-env "LANG" "C.UTF-8")
           (set-env "TERMINFO_DIRS" "${pkgs.ncurses}/share/terminfo")
-          (add-pkg-deps [ pkgs.zsh pkgs.ncurses ])
+          (add-pkg-deps [ pkgs.zsh pkgs.ncurses zshHomeFiles ])
         ];
     };
 
