@@ -37,6 +37,7 @@
     ],
     "defaultMode": "default"
   },
+  "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
-  "skipDangerousModePermissionPrompt": true
+  "model": "haiku"
 }
