@@ -1,8 +1,8 @@
 # jailed-agents-devshell.nix
 
 A reproducible Linux development environment to work with sandboxed coding
-agents, open source and vendor independent. Currently configured to work on
-Julia projects using Claude-code and Kaimon.jl.
+agents, open-source and vendor independent. Currently configured to work on
+Julia projects using Claude-code with MCPs [julia-mcp](https://github.com/aplavin/julia-mcp) or [Kaimon](https://github.com/kahliburke/Kaimon.jl).
 
 The project leverages nix, tmux and direnv to facilitate using coding agents in
 a reproducible, personalized and safer manner, on local machine or remotely via
@@ -14,10 +14,8 @@ ssh.
 > (access to) sensitive data, and commit through an independent forge (Github)
 > account using independent secrets (e.g. ssh keys).
 
-Currently, this repository provides the Claude CLI, a Julia REPL, and the MCPs
-[Kaimon](https://github.com/kahliburke/Kaimon.jl) and
-[julia-mcp](https://github.com/aplavin/julia-mcp), sandboxed in
-different Linux "user namespaces" via
+Currently, this repository provides claude-code CLI, julia, kaimon and
+julia-mcp independently sandboxed in different Linux "user namespaces" via
 [jail-nix](https://alexdav.id/projects/jail-nix/) (that is backed by
 [bubblewrap](https://github.com/containers/bubblewrap)). It has the following
 structure:
@@ -65,7 +63,7 @@ nix profile install nixpkgs#nix-direnv
 echo 'source $HOME/.nix-profile/share/nix-direnv/direnvrc' >> ~/.config/direnv/direnvrc
 ```
 
-Use this template (or clone the repository). Set the
+Clone the repository or use it as a the template. Set the
 ```nix
 devshellRoot = "";
 ```
@@ -123,12 +121,11 @@ This creates a tmux session with 4 windows:
 On the first session you ever create, `agentshome/.julia/` and other configs are empty, so you need to:
 - Go to the repl window and wait for the Kaimon install to finish,
 - Go to kaimon window and launch `jailed-kaimon` to set it up, choose "Lax" mode (filtering who accesses Kaimon is pointless since it is sandboxed),
-- Exit Claude, then from the shell run `claude-connect-kaimon` and optionally
-  `claude-connect-julia-mcp` (Claude launches julia-mcp on demand),
+- Exit Claude, then from the shell run `claude-connect-kaimon` and/or `claude-connect-julia-mcp` (Claude launches julia-mcp on demand),
 - launch `jailed-claude` again (or `yolo-jailed-claude`) and login.
 
-Claude should then be ready to pass Kaimon's `usage_quiz` and read `usage_instructions`.
-By default, Claude's login info should be stored in `agentshome/.claude/.credentials.json`.
+Claude should then be ready to pass use MCP tools. Claude's login info are
+stored in `agentshome/.claude/.credentials.json`.
 
 To return to the development session later, do not re-run `new_agent_session`
 (it kills and recreates the session and all existing agents), but
@@ -142,12 +139,12 @@ Or, manually
 tmux -L julia_agents ls # see live sessions
 tmux -L julia_agents attach -t <session>
 ```
-since the session is named after the folder.\
+The session is named after the folder `new_agent_session` was run from.\
 The non-default tmux socket `julia_agents` is used because the host tmux config
 is overwritten with one provided from nix, for use on remote machine.
 
-The difference between `jailed-[claude,julia]` and the `yolo-...` version is
-that the former is network restricted to the whitelists:
+The difference between `jailed-[claude,julia]` and the `yolo-...` versions is
+that the former are network restricted to the whitelists:
 ```nix
 claudeAllowedDomains = [
     "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com"
@@ -156,7 +153,6 @@ juliaAllowedDomains  = [
     "julialang.org" "julialang.net" "github.com" "githubusercontent.com"
 ];
 ```
-using [tinyproxy](https://tinyproxy.github.io/).
 
 
 ### Git identity and GitHub token
@@ -169,7 +165,7 @@ To give a git identity for the agent, set name and email in
 echo 'https://x-access-token:github_pat_{YOUR-TOKEN-HERE}@github.com' > agentshome/.git-credentials
 chmod 600 agentshome/.git-credentials
 ```
-Make sure to not commit .git-credentials to git.
+Make sure to not commit `.git-credentials` or `.claude/.credentials.json` to git...
 
 
 ## Security notes
@@ -192,14 +188,11 @@ should not be used within them.
 Relatedly, only ever `direnv allow` the top-level `agentshome/.envrc`, never
 allow an `.envrc` under `projects/`.
 
-As a guard against that mistake, some common host dev tools — `git`, `gh`,
-`julia`, `claude`, `kaimon`, `make`, `python`, `pip`, `uv`, `conda`, `node`,
-`npm`, `docker`, `apt` (see `guardedHostTools` in `flake.nix`) — are shadowed
-inside the devShell: they refuse to run anywhere under the `agentshome/` tree,
-appart from within a `jailed-shell`.
-It is a footgun-reducer, not a security boundary: not all dev tools are
-shadowed, and absolute paths (`/usr/bin/git`) or tools that embed git (libgit2,
-`gh`) bypass it.
+As a guard against that mistake, some common host development tools, listed in
+`guardedHostTools` in `flake.nix`, are "shadowed": they refuse to run anywhere
+under the `agentshome/` tree, appart from within a `jailed-shell`.
+This is not a security boundary: not all dev tools are shadowed, and absolute
+paths (`/usr/bin/git`) or tools that would embed git (libgit2, `gh`) bypass it.
 
 ## Extension and personalization
 
@@ -209,12 +202,13 @@ The tmux session layout is user-editable at
 configurations](https://home-manager-options.extranix.com/?query=zsh&release=release-25.11)
 of both the host panes and `jailed-shell` live in `nix_src/devshell-home.nix`.
 
-The top-level `CLAUDE.md` and `.claude/memories/` files are provided to give
-coding agents context about this template and how to personalize it.
+The top-level `CLAUDE.md` and `.claude/memories/` files are provided to give (a
+not-sandboxed) coding agents context about this template and how to personalize
+it.
 
 ### Creating a new sandboxed programs
 
-New jailed programs are defined in `nix_src/flake.nix` by calling `makeJailed`
+New sandboxed programs are defined in `nix_src/flake.nix` by calling `makeJailed`
 and adding the result to the development shell `packages` list (bottom of the file):
 ```nix
 (makeJailed {
@@ -222,23 +216,23 @@ and adding the result to the development shell `packages` list (bottom of the fi
   exe = pkgs.htop;
 })
 ```
-Every jail starts from the same baseline: a writable tmpfs (temporary file
+Every sandbox starts from the same baseline: a writable tmpfs (temporary file
 system) `$HOME`, the current project directory mounted read-write (the launcher
 refuses to run outside `agentshome/projects/`) and no network unless requested.
 
 `makeJailed` arguments:
 - `name` — command name of the generated launcher.
-- `exe` — program to sandbox: a nix package (e.g. from [nixpkgs](https://search.nixos.org/packages)) or a literal in-jail path string (c.f. jailed-kaimon).
+- `exe` — program to sandbox: a nix package (e.g. from [nixpkgs](https://search.nixos.org/packages)) or a literal in-jail path string (c.f. `jailed-kaimon`).
 - `extraArgs` — extra command-line arguments appended to every `exe` invocation (default `""`).
-- `extraPkgs` — additional packages made available on `PATH` inside the jail (default `[]`).
-- `options` — extra [jail.nix combinators](https://alexdav.id/projects/jail-nix/combinators/), typically binds of `agentshome/` subdirs into the jail `$HOME` (default `[]`).
-- `network` — `true` gives full host network access; `false` (default) leaves the jail in an empty network namespace, i.e. no egress.
+- `extraPkgs` — additional packages made available on `PATH` inside the sandbox (default `[]`).
+- `options` — extra [jail.nix combinators](https://alexdav.id/projects/jail-nix/combinators/), typically binds of `agentshome/` subdirs into the sandbox `$HOME` (default `[]`).
+- `network` — `true` gives full host network access; `false` (default) leaves the sandbox in an empty network namespace, i.e. no network.
 - `proxiedNetwork` — `true` keeps the empty namespace but bridges in a host-side domain-allowlist proxy; mutually exclusive with `network` (default `false`).
 - `allowedDomains` — if `proxiedNetwork`, the domains the proxy allows, subdomains included.
-- `socatLegs` — in-jail `socat` commands started in the background before `exe`, for bridging unix sockets into the jail (see the Claude↔Kaimon MCP legs).
+- `socatLegs` — in-sandbox `socat` commands started in the background before `exe`, for bridging unix sockets into the sandbox (see the Claude↔Kaimon MCP legs).
 
-To give the jail persistent state, bind subfolders of `agentshome/` in
-`options`, following the existing bind sets (`claudeConfigWriteBinds`, ...):
+To give the sandbox persistent config files or folders, bind subfolders of
+`agentshome/` in `options` (similarly to e.g. `claudeConfigWriteBinds`):
 ```nix
 options = with jail.combinators; [
   (rw-bind "${agentHomeDirectory}/.config/foo" "${jailHomeDirectory}/.config/foo")
@@ -247,11 +241,14 @@ options = with jail.combinators; [
 Bind sources are checked at eval time: they must stay under `agentshome/`, and
 must not expose any `forbiddenBindPaths` entry (see `flake.nix`). In
 particular, never bind `agentshome/.cache/` — it holds the host-side proxy
-sockets of every jail instance.
+sockets of every sandbox instance.
 
 ## Technical details
 
-The design is inspired on this [blog from Anderson. J](https://dev.to/andersonjoseph/how-i-run-llm-agents-in-a-secure-nix-sandbox-1899).
+The design is inspired on this [blog from Anderson.
+J](https://dev.to/andersonjoseph/how-i-run-llm-agents-in-a-secure-nix-sandbox-1899)
+and the network isolation strategy of
+[srt](https://github.com/anthropic-experimental/sandbox-runtime).
 
 The tool is developed using nix and only requires installing the [nix package
 manager](https://nixos.org/download/) (it is a "nix flake"). The user
@@ -272,7 +269,7 @@ The `jailed-*` tools can be used outside of a tmux session.
 
 > [!WARNING]
 > This section mostly comes from Claude's understanding / explanation, I don't
-> have the skills to review these materials in detail.
+> have the skills to review these materials in detail 🙃.
 
 The untrusted party is the sandboxed agent: it may run arbitrary code and
 create files within the project. So the design assumes the worst from anything
@@ -298,16 +295,16 @@ ever bound into any sandbox, so the agent cannot alter the developemnt tools (`j
   sandbox. On the host side that socket is a per-instance
   [tinyproxy](https://tinyproxy.github.io/) with a default-deny domain allowlist
   and `CONNECT` limited to ports 80/443 (`ip2unix` makes tinyproxy listen on the
-  socket, in-jail `socat` re-exposes it as the local `HTTP(S)_PROXY`). HTTPS
+  socket, in-sandbox `socat` re-exposes it as the local `HTTP(S)_PROXY`). HTTPS
   stays end-to-end encrypted — the proxy only sees the domain, it does not
   intercept TLS.\
-  If the proxy dies, the jail is left with the empty namespace, so no network.
+  If the proxy dies, the sandbox is left with the empty namespace, so no network.
 - *full* (e.g. `yolo-jailed-claude` & `...-julia`): host network, unrestricted.
 
 **Boundaries vs. footgun reducers.** The security boundaries are the
 file-system and network isolation described above. Everything else is a guard
 against user *mistakes*: the shadowed host tools, the current working directory
-checks refusing to start jails outside `agentshome/projects/`, and the
+checks refusing to start sandboxes outside `agentshome/projects/`, and the
 `forbiddenBindPaths` checked at direnv activation.
 
 **Assumed residual risks.** The agent necessarily holds working credentials
