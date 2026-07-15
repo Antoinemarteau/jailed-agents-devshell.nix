@@ -67,7 +67,7 @@ Tools available on `PATH` inside the env:
   `jailed-*` names to run the sandboxed agents.
 
 tmux is provided by the devShell (on `PATH`, not the host) and uses a dedicated socket
-(the host tmux config is deliberately overridden). Prefix is `C-t`.
+(the host tmux config is deliberately overridden). Prefix is the default `C-b`.
 ```bash
 tmux -L julia_agents ls                 # list live sessions
 tmux -L julia_agents attach -t <name>   # re-attach (do NOT re-run new_agent_session — it resets)
