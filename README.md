@@ -14,8 +14,10 @@ ssh.
 > (access to) sensitive data, and commit through an independent forge (Github)
 > account using independent secrets (e.g. ssh keys).
 
-Currently, this repository provides the Claude and Kaimon CLI as well as Julia
-REPL, sandboxed in different Linux "user namespaces" via
+Currently, this repository provides the Claude CLI, a Julia REPL, and the MCPs
+[Kaimon](https://github.com/kahliburke/Kaimon.jl) and
+[julia-mcp](https://github.com/aplavin/julia-mcp), sandboxed in
+different Linux "user namespaces" via
 [jail-nix](https://alexdav.id/projects/jail-nix/) (that is backed by
 [bubblewrap](https://github.com/containers/bubblewrap)). It has the following
 structure:
@@ -121,7 +123,8 @@ This creates a tmux session with 4 windows:
 On the first session you ever create, `agentshome/.julia/` and other configs are empty, so you need to:
 - Go to the repl window and wait for the Kaimon install to finish,
 - Go to kaimon window and launch `jailed-kaimon` to set it up, choose "Lax" mode (filtering who accesses Kaimon is pointless since it is sandboxed),
-- Exit Claude, run `claude-connect-kaimon` from the shell to connect the MCP,
+- Exit Claude, then from the shell run `claude-connect-kaimon` and optionally
+  `claude-connect-julia-mcp` (Claude launches julia-mcp on demand),
 - launch `jailed-claude` again (or `yolo-jailed-claude`) and login.
 
 Claude should then be ready to pass Kaimon's `usage_quiz` and read `usage_instructions`.
@@ -220,16 +223,15 @@ and adding the result to the development shell `packages` list (bottom of the fi
 })
 ```
 Every jail starts from the same baseline: a writable tmpfs (temporary file
-system) `$HOME`, the current project directory mounted read-write (the wrapper
+system) `$HOME`, the current project directory mounted read-write (the launcher
 refuses to run outside `agentshome/projects/`) and no network unless requested.
 
 `makeJailed` arguments:
-- `name` — command name of the generated wrapper.
+- `name` — command name of the generated launcher.
 - `exe` — program to sandbox: a nix package (e.g. from [nixpkgs](https://search.nixos.org/packages)) or a literal in-jail path string (c.f. jailed-kaimon).
 - `extraArgs` — extra command-line arguments appended to every `exe` invocation (default `""`).
 - `extraPkgs` — additional packages made available on `PATH` inside the jail (default `[]`).
 - `options` — extra [jail.nix combinators](https://alexdav.id/projects/jail-nix/combinators/), typically binds of `agentshome/` subdirs into the jail `$HOME` (default `[]`).
-- `preHook` — bash run on the host before entering the jail, e.g. `mkdir -p` the folders about to be bound (default `""`).
 - `network` — `true` gives full host network access; `false` (default) leaves the jail in an empty network namespace, i.e. no egress.
 - `proxiedNetwork` — `true` keeps the empty namespace but bridges in a host-side domain-allowlist proxy; mutually exclusive with `network` (default `false`).
 - `allowedDomains` — if `proxiedNetwork`, the domains the proxy allows, subdomains included.

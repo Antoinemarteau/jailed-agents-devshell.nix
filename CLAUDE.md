@@ -17,7 +17,7 @@ evaluation and by launching a session (see Commands).
   subdirectory, not the repo root):
   - `flake.nix` — the `devShell`. The `let` block holds the config vars; **`devshellRoot`
     must be set to the absolute path of the repo checkout** (edited per clone; a trailing
-    slash is tolerated). Assembles the jailed-agent wrappers and the `new_agent_session`
+    slash is tolerated). Assembles the jailed-agent launchers and the `new_agent_session`
     launcher into the shell's `packages`.
   - `jailed-agents.nix` — the generic sandbox machinery (see Architecture): `makeJailed`,
     common binds, the network-allowlist proxy plumbing, `new_agent_session` /
@@ -90,19 +90,23 @@ effects.
 
 **Two-layer split: generic vs. program-specific.** `jailed-agents.nix` owns everything
 program-agnostic: the generic `makeJailed { name, exe, extraArgs, socatLegs, network,
-proxiedNetwork, allowedDomains, options, extraPkgs, preHook }` builds each agent as an
-outer `writeShellScriptBin` wrapper around an inner `jail "<name>-inner" …` sandbox
-(`exe` — a derivation or literal path — and `socatLegs` are resolved into a launcher by
-`mkLauncher`; the wrapper runs `preHook` and the shared `assertInDevshell` cwd check, then
-`exec`s the inner). It also owns the network-allowlist proxy plumbing (tinyproxy listening
-on a per-instance unix socket via ip2unix, `restrictedNetOptions`, `localhostResolveBinds`),
-common binds (`gitReadBinds`,
-`nixLdBinds`), and `new_agent_session`/`attach_agent_session`. `flake.nix` owns everything
-program-specific: the `makeJailedClaude/Shell/Julia/Kaimon` constructors (each a thin call
-into `makeJailed` setting `exe`, `network`, `proxiedNetwork`, `preHook`, and `options`),
-their bind sets (`claudeConfigWriteBinds`, `juliaDepotWriteBinds`, `kaimonCacheWriteBinds`,
-`kaimonConfigWriteBinds`), the Claude↔Kaimon MCP socat legs, and the domain allowlists.
-The inner sandbox's store path fully encodes its binds/program/network — comparing inner
+proxiedNetwork, allowedDomains, options, extraPkgs }` builds each agent as a single
+`jail "<name>" …` launcher (`exe` — a derivation or literal path — and `socatLegs` are
+resolved into the in-jail program by `mkLauncher`). Host-side prep and services are jail.nix
+`add-runtime`/`add-cleanup` combinators inside that launcher: the shared `assertInDevshell`
+cwd check runs first, bind sets carry their own `mkdir`s, and the network-allowlist proxy
+(tinyproxy listening on a per-instance unix socket via ip2unix, `mkRestrictedNetOptions`)
+starts just before bwrap and is killed when the jail exits. `jailed-agents.nix` also owns
+`mkServerSocketOptions` (options letting a jail spawn a jailed server on demand through a
+socket — an idle host-side `socat` listener spawns one fresh server per connection, with
+only the socket file bound into the jail), `localhostResolveBinds`, common binds
+(`gitReadBinds`, `nixLdBinds`), and `new_agent_session`/`attach_agent_session`. `flake.nix`
+owns everything program-specific: the `makeJailedClaude/Shell/Julia/Kaimon/JuliaMcp`
+constructors (each a thin call into `makeJailed` setting `exe`, `network`, `proxiedNetwork`,
+and `options`), their bind sets (`claudeConfigWriteBinds`, `juliaDepotWriteBinds`,
+`kaimonCacheWriteBinds`, `kaimonConfigWriteBinds`), the Claude↔Kaimon MCP socat legs, the
+julia-mcp server socket (`juliaMcpServerSocketOptions`), and the domain allowlists.
+The launcher's store path fully encodes its binds/program/network — comparing these
 derivations before/after a refactor is a reliable equivalence check
 (`nix eval --raw .#devShells.<system>.default.drvPath`).
 
@@ -151,7 +155,7 @@ the project dir).
   directory holds every instance's host-side proxy socket, and a jail that can reach it
   could route through another jail's allowlist. Bind only specific `.cache/` subdirs
   (as `kaimonCacheWriteBinds` does). Enforced at eval time by `assertNoForbiddenBinds`
-  in `jailed-agents.nix`, which scans the inner jail's bwrap args for bind sources that
+  in `jailed-agents.nix`, which scans each launcher's bwrap args for bind sources that
   expose `.cache/jail-net` or any `forbiddenBindPaths` entry (set in `flake.nix`; also
   covers ancestor binds up to `/`), and requires every static bind source to be under
   `agentshome/` or the nix store (jail.nix's `~/.local/share/jail.nix` fake-passwd data

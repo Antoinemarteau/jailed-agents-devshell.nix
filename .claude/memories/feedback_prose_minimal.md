@@ -4,6 +4,7 @@ description: "Prefer minimal, in-place additions to prose (README, comments) ove
 metadata: 
   node_type: memory
   type: feedback
+  originSessionId: f8f258f2-8e1d-427f-bbb8-eeb476ec4cf0
 ---
 
 For docs and code comments in this project, prefer *minimal in-place additions*
@@ -25,3 +26,6 @@ concise ones stick.
   digressions — state what is true, briefly
 - When an Edit is rejected with "do not add the comment", omit the comment
   entirely rather than trying a shorter version — the code should stand alone
+- README links (2026-07-15): put a project's hyperlink at its FIRST mention in the
+  intro, never repeated in usage steps; usage steps stay plain and terse (e.g. just
+  "Claude launches julia-mcp on demand", no parenthetical detail chains)

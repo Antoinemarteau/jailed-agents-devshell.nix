@@ -8,9 +8,13 @@
     };
     jail-nix.url = "sourcehut:~alexdavid/jail.nix";
     llm-agents.url = "github:numtide/llm-agents.nix";
+    julia-mcp = {
+      url = "github:aplavin/julia-mcp";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, ... }:
+  outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, julia-mcp, ... }:
   flake-utils.lib.eachDefaultSystem (system:
   let
     pkgs = import nixpkgs {
@@ -42,6 +46,7 @@
       "${devshellRoot}/${devshellHostHomeFolder}"  # host interactive $HOME (zsh/tmux startup files)
       "${devshellRoot}/nix_src"        # this flake: defines the jails themselves
       "${devshellRoot}/.git"           # repo hooks/config run by host git
+      "${agentHomeDirectory}/.cache/julia-mcp-sock"  # per-instance julia-mcp listener sockets
     ];
 
 
@@ -67,8 +72,8 @@
       homeDirectory = agentHomeDirectory;
     };
     inherit (jailedAgents)
-      makeJailed gitReadBinds nixLdBinds hostHomeManager
-      newAgentSession attachAgentSession guardHostTool;
+      makeJailed mkServerSocketOptions gitReadBinds nixLdBinds
+      hostHomeManager newAgentSession attachAgentSession guardHostTool;
 
     tmux-pkg = hostHomeManager.config.programs.tmux.package;
 
@@ -85,6 +90,7 @@
 
     # Shared dir for the Claude<->Kaimon MCP socket
     kaimonBridgeBinds = with jail.combinators; [
+      (add-runtime "mkdir -p ${agentHomeDirectory}/.cache/kaimon-jail-sock")
       (rw-bind "${agentHomeDirectory}/.cache/kaimon-jail-sock" "${jailHomeDirectory}/.cache/kaimon-jail-sock")
     ];
 
@@ -93,10 +99,12 @@
 
     # for Kaimon <-> Julia communication
     kaimonCacheWriteBinds = with jail.combinators; [
+      (add-runtime "mkdir -p ${agentHomeDirectory}/.cache/kaimon/sock")
       (rw-bind "${agentHomeDirectory}/.cache/kaimon" "${jailHomeDirectory}/.cache/kaimon")
     ];
 
     kaimonConfigWriteBinds = with jail.combinators; [
+      (add-runtime "mkdir -p ${agentHomeDirectory}/.config/kaimon")
       (rw-bind "${agentHomeDirectory}/.config/kaimon" "${jailHomeDirectory}/.config/kaimon")
     ];
 
@@ -111,12 +119,6 @@
         extraPkgs = [ julia-pkg ] ++ extraPkgs;
         socatLegs = [ kaimonServerLeg ];
         network = false;
-        preHook = ''
-          [ -d ${agentHomeDirectory} ]
-          mkdir -p ${agentHomeDirectory}/.cache/kaimon/sock
-          mkdir -p ${agentHomeDirectory}/.cache/kaimon-jail-sock
-          mkdir -p ${agentHomeDirectory}/.config/kaimon
-        '';
         options =
           juliaDepotReadBinds ++
           kaimonCacheWriteBinds ++
@@ -132,6 +134,8 @@
     claude-pkg = llm-agents.packages.${system}.claude-code;
 
     claudeConfigWriteBinds = with jail.combinators; [
+      # makes sure a writable and host persisted .claude.json file exists
+      (add-runtime "[ -f ${agentHomeDirectory}/.claude.json ] || echo '{}' > ${agentHomeDirectory}/.claude.json")
       (rw-bind "${agentHomeDirectory}/.claude" "${jailHomeDirectory}/.claude")
       (rw-bind "${agentHomeDirectory}/.claude.json" "${jailHomeDirectory}/.claude.json")
     ];
@@ -147,13 +151,7 @@
         exe = claude-pkg;
         socatLegs = [ kaimonClientLeg ];
         network = !proxiedNetwork;
-        preHook = ''
-          # makes sure a writable and host persisted .claude.json file exists
-          [ -f ${agentHomeDirectory}/.claude.json ] || echo '{}' > ${agentHomeDirectory}/.claude.json
-          # shared dir for the Claude<->Kaimon MCP socket
-          mkdir -p ${agentHomeDirectory}/.cache/kaimon-jail-sock
-        '';
-        options = claudeConfigWriteBinds ++ gitReadBinds ++ kaimonBridgeBinds;
+        options = claudeConfigWriteBinds ++ gitReadBinds ++ kaimonBridgeBinds ++ juliaMcpServerSocketOptions;
       };
 
 
@@ -175,12 +173,41 @@
         inherit name extraPkgs proxiedNetwork allowedDomains;
         exe = julia-pkg;
         network = !proxiedNetwork;
-        preHook = ''
-          [ -d ${agentHomeDirectory} ]
-          mkdir -p ${agentHomeDirectory}/.cache/kaimon/sock
-        '';
         options = juliaDepotWriteBinds ++ kaimonCacheWriteBinds ++ nixLdBinds;
       };
+
+
+    ###########################################################################
+    # jailed-julia-mcp
+    # julia-mcp stdio MCP server in its own jail, launched by Claude on demand.
+    ###########################################################################
+
+    jailJuliaMcpSock = "${jailHomeDirectory}/.cache/julia-mcp-sock/mcp.sock";
+
+    makeJailedJuliaMcp = { extraPkgs ? [], name ? "jailed-julia-mcp", allowedDomains ? [],
+                           proxiedNetwork ? false }:
+      makeJailed {
+        inherit name allowedDomains proxiedNetwork;
+        exe = pkgs.writeShellScriptBin "julia-mcp-server" ''
+          exec python3 -u ${julia-mcp}/server.py "$@"
+        '';
+        extraPkgs = [ julia-pkg (pkgs.python3.withPackages (ps: [ ps.mcp ])) ] ++ extraPkgs;
+        network = !proxiedNetwork;
+        options = juliaDepotWriteBinds ++ nixLdBinds;
+      };
+
+    jailedJuliaMcp = makeJailedJuliaMcp {
+      proxiedNetwork = true;
+      allowedDomains = juliaAllowedDomains;
+    };
+
+    # Socket activation for the claude jails: an idle host-side listener holds a
+    # per-instance socket, bound into the jail at jailJuliaMcpSock; each connection
+    # from Claude spawns jailedJuliaMcp on its stdio, and the listener dies with the
+    # jail. Only the single socket file enters the jail — never bind the
+    # .cache/julia-mcp-sock dir itself (cf. forbiddenBindPaths).
+    juliaMcpServerSocketOptions =
+      mkServerSocketOptions "julia-mcp" jailedJuliaMcp jailJuliaMcpSock;
 
 
     ###########################################################################
@@ -203,15 +230,6 @@
         exe = pkgs.zsh;
         extraPkgs = [ pkgs.zsh pkgs.ncurses zshHomeFiles ] ++ extraPkgs;
         network = true;
-        preHook = ''
-          # makes sure a writable and host persisted .claude.json file exists
-          [ -f ${agentHomeDirectory}/.claude.json ] || echo '{}' > ${agentHomeDirectory}/.claude.json
-          # similar with Kaimon config folders
-          mkdir -p ${agentHomeDirectory}/.cache/kaimon/sock
-          mkdir -p ${agentHomeDirectory}/.config/kaimon
-          # persistent zsh history, shared across jailed-shell invocations
-          mkdir -p ${agentHomeDirectory}/.local/state
-        '';
         options = with jail.combinators;
           claudeConfigWriteBinds ++
           gitReadBinds ++
@@ -220,6 +238,8 @@
           kaimonCacheWriteBinds ++
           nixLdBinds ++ [
             (ro-bind "${zshHomeFiles}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
+            # persistent zsh history, shared across jailed-shell invocations
+            (add-runtime "mkdir -p ${agentHomeDirectory}/.local/state")
             (rw-bind "${agentHomeDirectory}/.local/state" "${jailHomeDirectory}/.local/state") # zsh history
             (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
             (set-env "LANG" "C.UTF-8")
@@ -236,6 +256,7 @@
         newAgentSession
         attachAgentSession
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
+      (writeShellScriptBin "claude-connect-julia-mcp" ''exec jailed-claude mcp add --scope user julia -- socat - UNIX-CONNECT:${jailJuliaMcpSock}'')
 
         # jailed-claude: claude-code with skip permission and restricted network
         (makeJailedClaude {
@@ -269,6 +290,10 @@
 
         # jailed-kaimon: no network access
         (makeJailedKaimon { })
+
+        # jailed-julia-mcp: julia-mcp MCP server, egress restricted to the Julia
+        # registries; spawned by the claude jails on demand, exposed for debugging
+        jailedJuliaMcp
 
         # jailed-shell: zsh with all dev. tools and all folders other jail have binded for debugging
         (makeJailedShell {

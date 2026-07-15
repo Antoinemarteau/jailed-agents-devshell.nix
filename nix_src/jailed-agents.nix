@@ -104,7 +104,7 @@ let
   # Point HTTP clients at the in-jail proxy endpoint and supply a CA bundle
   # since /etc/ssl is unbound (localhost resolution is handled by makeJailed
   # itself for every jail without full host network).
-  restrictedNetOptions = with jail.combinators; [
+  mkRestrictedNetOptions = name: allowedDomains: with jail.combinators; [
     (set-env "HTTP_PROXY"  "http://127.0.0.1:${toString proxyPort}")
     (set-env "HTTPS_PROXY" "http://127.0.0.1:${toString proxyPort}")
     (set-env "http_proxy"  "http://127.0.0.1:${toString proxyPort}")
@@ -117,8 +117,36 @@ let
     (set-env "CURL_CA_BUNDLE"      cacertBundle)
     (set-env "NODE_EXTRA_CA_CERTS" cacertBundle)
     (add-pkg-deps [ pkgs.cacert ])
-    # per-instance host proxy socket, bound in at runtime (see makeJailed)
-    (unsafe-add-raw-args ''--bind "''${JAIL_PROXY_HOST_SOCK-}" ${jailProxySock}'')
+    # Per-instance host proxy socket (keyed by the launcher's PID) so concurrent
+    # instances of this jail don't collide. ip2unix makes tinyproxy listen on it
+    # directly; its TCP port is virtual, so instances cannot clash on it either.
+    # SECURITY: never bind .cache/ or .cache/jail-net into a jail — it holds every
+    # instance's proxy socket, and a jail reaching it could use another jail's
+    # allowlist. Only the single socket file below enters the jail.
+    (add-runtime ''
+      _jn_dir="${homeDirectory}/.cache/jail-net"
+      mkdir -p "$_jn_dir"
+      JAIL_PROXY_HOST_SOCK="$_jn_dir/${name}.$$.sock"
+      rm -f "$JAIL_PROXY_HOST_SOCK"
+      ${getExe pkgs.ip2unix} -r in,tcp,port=${toString proxyPort},path="$JAIL_PROXY_HOST_SOCK" \
+        ${getExe pkgs.tinyproxy} -d -c ${mkProxyConf name allowedDomains} \
+        >>"$_jn_dir/${name}-proxy.log" 2>&1 &
+      _jn_pid=$!
+      # the socket appearing means tinyproxy accepted its conf and bound the listener
+      _jn_w=0
+      until [ -S "$JAIL_PROXY_HOST_SOCK" ]; do
+        if ! kill -0 "$_jn_pid" 2>/dev/null || [ "$_jn_w" -gt 100 ]; then
+          echo "${name}: could not start network proxy (see $_jn_dir/${name}-proxy.log)" >&2
+          exit 1
+        fi
+        _jn_w=$((_jn_w + 1)); sleep 0.05
+      done
+      RUNTIME_ARGS+=(--bind "$JAIL_PROXY_HOST_SOCK" ${jailProxySock})
+    '')
+    (add-cleanup ''
+      kill "''${_jn_pid-}" 2>/dev/null || true
+      rm -f "''${JAIL_PROXY_HOST_SOCK-}"
+    '')
   ];
 
   # Default-deny allowlist: a host is reachable iff it equals an allowed domain or is a
@@ -146,6 +174,54 @@ let
     ConnectPort 443
     ConnectPort 80
   '';
+
+
+  #############################################################################
+  # Server sockets (spawn a jailed server on demand from inside a jail)
+  #############################################################################
+
+  # Returns jail options that let programs inside the jail spawn `serverExe` (a
+  # jailed launcher derivation) on demand, stdio-wired — the pattern MCP clients
+  # and LSP hosts expect, made to work across the jail boundary. add-runtime
+  # starts an idle per-instance host-side listener that spawns one fresh
+  # `serverExe` process per connection (`pipes` gives it plain stdio fds), and
+  # binds only the single socket file to `jailSockPath` inside the jail;
+  # add-cleanup kills the listener and removes the socket when the jail exits.
+  # The in-jail client connects with `socat - UNIX-CONNECT:<jailSockPath>`.
+  # SECURITY: never bind .cache/<name>-sock itself into a jail — it holds every
+  # instance's listener socket; add it to forbiddenBindPaths (cf. flake.nix).
+  mkServerSocketOptions = name: serverExe: jailSockPath:
+    let
+      # shell variables are keyed by `name` so that several server sockets in
+      # one jail cannot clobber each other's cleanup state; `r` is the
+      # `$`-prefixed reference form (`$${…}` in the script would be literal)
+      v = "_${builtins.replaceStrings [ "-" "." ] [ "_" "_" ] name}";
+      r = "$" + v;
+    in with jail.combinators; [
+      (add-runtime ''
+        ${v}_dir="${homeDirectory}/.cache/${name}-sock"
+        mkdir -p "${r}_dir"
+        ${v}_sock="${r}_dir/${name}.$$.sock"
+        rm -f "${r}_sock"
+        ${getExe pkgs.socat} UNIX-LISTEN:"${r}_sock",fork EXEC:"${getExe serverExe}",pipes &
+        ${v}_pid=$!
+        ${v}_w=0
+        until [ -S "${r}_sock" ]; do
+          if ! kill -0 "${r}_pid" 2>/dev/null || [ "${r}_w" -gt 100 ]; then
+            echo "could not start the ${name} listener" >&2
+            exit 1
+          fi
+          ${v}_w=$((${v}_w + 1)); sleep 0.05
+        done
+        RUNTIME_ARGS+=(--bind "${r}_sock" ${jailSockPath})
+      '')
+      # `|| true`: cleanups run under errexit, and a failed kill (process already
+      # gone) must not abort the remaining cleanup lines
+      (add-cleanup ''
+        kill "''${${v}_pid-}" 2>/dev/null || true
+        rm -f "''${${v}_sock-}"
+      '')
+    ];
 
 
   #############################################################################
@@ -219,7 +295,7 @@ let
 
   # Main function to create a sandboxed `exe`
   # `network` and `proxiedNetwork` are mutually exclusive.
-  makeJailed = { name, exe, extraArgs ? "", socatLegs ? [], preHook ? "", network ? false,
+  makeJailed = { name, exe, extraArgs ? "", socatLegs ? [], network ? false,
                  options ? [], extraPkgs ? [], proxiedNetwork ? false, allowedDomains ? [] }:
     assert pkgs.lib.assertMsg (!(network && proxiedNetwork))
       "${name}: network and proxiedNetwork are mutually exclusive";
@@ -228,50 +304,14 @@ let
     let
       allSocatLegs = pkgs.lib.optionals proxiedNetwork [ proxyClientLeg ] ++ socatLegs;
       program = mkLauncher name exe extraArgs allSocatLegs;
-
-      inner = assertNoForbiddenBinds name (jail "${name}-inner" program (
-        commonJailOptions ++
-        pkgs.lib.optionals network [ jail.combinators.network ] ++
-        pkgs.lib.optionals (!network) localhostResolveBinds ++
-        pkgs.lib.optionals proxiedNetwork restrictedNetOptions ++
-        options ++
-        [ (jail.combinators.add-pkg-deps extraPkgs) ]));
-
-      runInner =
-        if !proxiedNetwork then ''
-          exec ${getExe inner} "$@"
-        '' else ''
-          # Per-instance host proxy socket (keyed by this wrapper's PID) so concurrent
-          # instances of this jail don't collide. ip2unix makes tinyproxy listen on it
-          # directly; its TCP port is virtual, so instances cannot clash on it either.
-          # SECURITY: never bind .cache/ or .cache/jail-net into a jail — it holds every
-          # instance's proxy socket, and a jail reaching it could use another jail's
-          # allowlist. Only the single socket file below is bound in (restrictedNetOptions).
-          _jn_dir="${homeDirectory}/.cache/jail-net"
-          mkdir -p "$_jn_dir"
-          export JAIL_PROXY_HOST_SOCK="$_jn_dir/${name}.$$.sock"
-          rm -f "$JAIL_PROXY_HOST_SOCK"
-          ${getExe pkgs.ip2unix} -r in,tcp,port=${toString proxyPort},path="$JAIL_PROXY_HOST_SOCK" \
-            ${getExe pkgs.tinyproxy} -d -c ${mkProxyConf name allowedDomains} \
-            >>"$_jn_dir/${name}-proxy.log" 2>&1 &
-          _jn_pid=$!
-          trap '_jn_st=$?; kill "$_jn_pid" 2>/dev/null; rm -f "$JAIL_PROXY_HOST_SOCK"; exit $_jn_st' EXIT INT TERM
-          # the socket appearing means tinyproxy accepted its conf and bound the listener
-          _jn_w=0
-          until [ -S "$JAIL_PROXY_HOST_SOCK" ]; do
-            if ! kill -0 "$_jn_pid" 2>/dev/null || [ "$_jn_w" -gt 100 ]; then
-              echo "${name}: could not start network proxy (see $_jn_dir/${name}-proxy.log)" >&2
-              exit 1
-            fi
-            _jn_w=$((_jn_w + 1)); sleep 0.05
-          done
-          ${getExe inner} "$@"
-        '';
-    in pkgs.writeShellScriptBin name ''
-      ${assertInDevshell name}
-      ${preHook}
-      ${runInner}
-    '';
+    in assertNoForbiddenBinds name (jail name program (
+      [ (jail.combinators.add-runtime (assertInDevshell name)) ] ++
+      commonJailOptions ++
+      pkgs.lib.optionals network [ jail.combinators.network ] ++
+      pkgs.lib.optionals (!network) localhostResolveBinds ++
+      pkgs.lib.optionals proxiedNetwork (mkRestrictedNetOptions name allowedDomains) ++
+      options ++
+      [ (jail.combinators.add-pkg-deps extraPkgs) ]));
 
   # Launch (or reset) a tmux development session for the current project.
   # Entering the devShell (via direnv or `nix develop`) only puts the tools
@@ -369,6 +409,6 @@ let
   '';
 
 in {
-  inherit makeJailed gitReadBinds nixLdBinds hostHomeManager
-          newAgentSession attachAgentSession guardHostTool;
+  inherit makeJailed mkServerSocketOptions gitReadBinds nixLdBinds
+          hostHomeManager newAgentSession attachAgentSession guardHostTool;
 }

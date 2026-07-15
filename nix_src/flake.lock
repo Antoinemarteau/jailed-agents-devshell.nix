@@ -132,6 +132,22 @@
         "type": "sourcehut"
       }
     },
+    "julia-mcp": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1781136000,
+        "narHash": "sha256-jQVxnb9R1x4bKs/DzRxeFajHCTpVJVrirUML0uQfXGM=",
+        "owner": "aplavin",
+        "repo": "julia-mcp",
+        "rev": "4456af16cb9c8617aa4c7bec153f346978fc4fe0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aplavin",
+        "repo": "julia-mcp",
+        "type": "github"
+      }
+    },
     "llm-agents": {
       "inputs": {
         "blueprint": "blueprint",
@@ -192,6 +208,7 @@
         "flake-utils": "flake-utils",
         "home-manager": "home-manager",
         "jail-nix": "jail-nix",
+        "julia-mcp": "julia-mcp",
         "llm-agents": "llm-agents",
         "nixpkgs": "nixpkgs_2"
       }

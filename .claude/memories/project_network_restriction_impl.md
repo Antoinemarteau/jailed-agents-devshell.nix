@@ -34,3 +34,17 @@ sockets, no shared PID namespace needed.
 - New nix files must be `git add`-ed before `nix eval`/build sees them (flakes only track git-tracked files).
 
 **Open follow-up:** verify `jailed-julia-net` `] add` works through the proxy — Pkg via the default server uses Downloads.jl (libcurl, honors HTTPS_PROXY) so should work; LibGit2 registry/package ops may not honor the proxy. README not yet updated for the new commands/config vars.
+
+**Single-layer refactor (2026-07-15): the outer wrapper, `runInner`, and `preHook` are GONE.**
+`makeJailed` now returns the jail.nix launcher directly (`jail "<name>"` — no more
+`<name>-inner` derivations). Host-side prep became jail.nix combinators: `assertInDevshell`
+is the launcher's first `add-runtime`; bind sets carry their own `mkdir`s via `add-runtime`;
+the proxy lives in `mkRestrictedNetOptions name allowedDomains` as `add-runtime` (start
+ip2unix+tinyproxy, wait for the socket, `RUNTIME_ARGS+=(--bind "$JAIL_PROXY_HOST_SOCK"
+/run/jail-net/proxy.sock)` — the documented jail.nix mechanism, replacing the
+`unsafe-add-raw-args` env-var bind) + `add-cleanup` (kill + rm; each kill `|| true` since
+cleanups run under writeShellApplication errexit). jail.nix auto-switches from `exec bwrap`
+to `trap cleanup EXIT` when cleanups exist. Verified live post-refactor: jailed-claude -p
+drove julia-mcp end-to-end (sum(1:100)=5050), proxy + listener cleaned up on exit
+(tinyproxy takes ~2s graceful shutdown after TERM — not a leak). See
+[[project_julia_mcp_integration]] for the activation pattern this generalizes.

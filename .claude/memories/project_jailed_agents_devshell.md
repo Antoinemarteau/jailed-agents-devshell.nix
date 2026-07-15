@@ -43,7 +43,7 @@ split above. `network-restrictions.nix` no longer exists (merged into `jailed-ag
 `~/.julia/bin/kaimon`) + `extraArgs`/`socatLegs` instead of a pre-built `program`; it
 resolves them via `mkLauncher`, which returns `exe` unwrapped when there's nothing to run
 first (no legs, no extraArgs) — avoids an unnecessary wrapper script for e.g. `jailed-julia`
-(unrestricted) and `jailed-shell`. `proxiedNetwork` (renamed from `proxiedNetwork` 2026-07-15)/`allowedDomains` replaced the old
+(unrestricted) and `jailed-shell`. `proxiedNetwork` (renamed from `restrictNetwork` 2026-07-15)/`allowedDomains` replaced the old
 `proxyDomains` — `makeJailed` asserts `network && proxiedNetwork` never both true, and
 `allowedDomains == []` whenever `proxiedNetwork = false`. `localhostResolveBinds` is now
 applied automatically to every `!network` jail (not just proxy-restricted ones — Kaimon
@@ -77,7 +77,7 @@ Bind variables (program-specific ones now in `flake.nix`, generic ones in `jaile
 
 ## Key invariants
 
-- `assertInDevshell` in each wrapper: jailed programs can only run from inside `agentshome/projects/`
+- `assertInDevshell` (now the first add-runtime of each launcher): jailed programs can only run from inside `agentshome/projects/`
 - `agentshome/.claude.json` must exist before bwrap runs — `withClaudeConfigInit` does `touch` to ensure it
 - `startup.jl` in `agentshome/.julia/config/` auto-installs Revise and Kaimon via `Pkg.Apps.add`
 - Kaimon app script (`~/.julia/bin/kaimon`) hardcodes JULIA_LOAD_PATH at install time — if HOME was wrong when installed, delete it and let startup.jl reinstall
