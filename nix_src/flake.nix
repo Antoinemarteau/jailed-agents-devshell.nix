@@ -137,17 +137,17 @@
       (rw-bind "${agentHomeDirectory}/.claude.json" "${jailHomeDirectory}/.claude.json")
     ];
 
-    # restrictNetwork = true : empty netns, internet only via the host allowlist proxy.
-    # restrictNetwork = false: full host network (for use on an isolated remote server).
+    # proxiedNetwork = true : empty netns, internet only via the host allowlist proxy.
+    # proxiedNetwork = false: full host network (for use on an isolated remote server).
     # The Claude<->Kaimon MCP socat bridge is present either way, since Kaimon always
     # runs in its own netns.
     makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude", allowedDomains ? [],
-                         restrictNetwork ? false, extraArgs ? "" }:
+                         proxiedNetwork ? false, extraArgs ? "" }:
       makeJailed {
-        inherit name extraPkgs restrictNetwork allowedDomains extraArgs;
+        inherit name extraPkgs proxiedNetwork allowedDomains extraArgs;
         exe = claude-pkg;
         socatLegs = [ kaimonClientLeg ];
-        network = !restrictNetwork;
+        network = !proxiedNetwork;
         preHook = ''
           # makes sure a writable and host persisted .claude.json file exists
           [ -f ${agentHomeDirectory}/.claude.json ] || echo '{}' > ${agentHomeDirectory}/.claude.json
@@ -168,14 +168,14 @@
       (rw-bind "${agentHomeDirectory}/.julia" "${jailHomeDirectory}/.julia")
     ];
 
-    # restrictNetwork = true : empty netns, internet only via the host allowlist proxy
-    #   (e.g. the Julia registries). restrictNetwork = false: full host network.
+    # proxiedNetwork = true : empty netns, internet only via the host allowlist proxy
+    #   (e.g. the Julia registries). proxiedNetwork = false: full host network.
     makeJailedJulia = { extraPkgs ? [], name ? "jailed-julia", allowedDomains ? [],
-                        restrictNetwork ? false }:
+                        proxiedNetwork ? false }:
       makeJailed {
-        inherit name extraPkgs restrictNetwork allowedDomains;
+        inherit name extraPkgs proxiedNetwork allowedDomains;
         exe = julia-pkg;
-        network = !restrictNetwork;
+        network = !proxiedNetwork;
         preHook = ''
           [ -d ${agentHomeDirectory} ]
           mkdir -p ${agentHomeDirectory}/.cache/kaimon/sock
@@ -245,7 +245,7 @@
           name = "jailed-claude";
           extraPkgs = [ ];
           extraArgs = "--dangerously-skip-permissions";
-          restrictNetwork = true;
+          proxiedNetwork = true;
           allowedDomains = claudeAllowedDomains;
         })
 
@@ -260,7 +260,7 @@
         (makeJailedJulia {
           name = "jailed-julia";
           extraPkgs = [ python3 ];
-          restrictNetwork = true;
+          proxiedNetwork = true;
           allowedDomains = juliaAllowedDomains;
         })
 

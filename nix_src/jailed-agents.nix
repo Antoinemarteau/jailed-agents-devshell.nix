@@ -72,7 +72,7 @@ let
 
 
   #############################################################################
-  # Jail network whitelist logic (restrictNetwork argument of makeJailed)
+  # Jail network whitelist logic (proxiedNetwork argument of makeJailed)
   #############################################################################
 
   # A network-restricted jail keeps jail.nix's default empty netns (kernel-enforced
@@ -218,27 +218,27 @@ let
     jailed;
 
   # Main function to create a sandboxed `exe`
-  # `network` and `restrictNetwork` are mutually exclusive.
+  # `network` and `proxiedNetwork` are mutually exclusive.
   makeJailed = { name, exe, extraArgs ? "", socatLegs ? [], preHook ? "", network ? false,
-                 options ? [], extraPkgs ? [], restrictNetwork ? false, allowedDomains ? [] }:
-    assert pkgs.lib.assertMsg (!(network && restrictNetwork))
-      "${name}: network and restrictNetwork are mutually exclusive";
-    assert pkgs.lib.assertMsg (restrictNetwork || allowedDomains == [])
-      "${name}: allowedDomains must be empty when restrictNetwork = false";
+                 options ? [], extraPkgs ? [], proxiedNetwork ? false, allowedDomains ? [] }:
+    assert pkgs.lib.assertMsg (!(network && proxiedNetwork))
+      "${name}: network and proxiedNetwork are mutually exclusive";
+    assert pkgs.lib.assertMsg (proxiedNetwork || allowedDomains == [])
+      "${name}: allowedDomains must be empty when proxiedNetwork = false";
     let
-      allSocatLegs = pkgs.lib.optionals restrictNetwork [ proxyClientLeg ] ++ socatLegs;
+      allSocatLegs = pkgs.lib.optionals proxiedNetwork [ proxyClientLeg ] ++ socatLegs;
       program = mkLauncher name exe extraArgs allSocatLegs;
 
       inner = assertNoForbiddenBinds name (jail "${name}-inner" program (
         commonJailOptions ++
         pkgs.lib.optionals network [ jail.combinators.network ] ++
         pkgs.lib.optionals (!network) localhostResolveBinds ++
-        pkgs.lib.optionals restrictNetwork restrictedNetOptions ++
+        pkgs.lib.optionals proxiedNetwork restrictedNetOptions ++
         options ++
         [ (jail.combinators.add-pkg-deps extraPkgs) ]));
 
       runInner =
-        if !restrictNetwork then ''
+        if !proxiedNetwork then ''
           exec ${getExe inner} "$@"
         '' else ''
           # Per-instance host proxy socket (keyed by this wrapper's PID) so concurrent
