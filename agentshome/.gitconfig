@@ -1,6 +1,6 @@
 [user]
-  name = Antoine Marteau
-  email = antoine.marteau@protonmail.com
+  name = your-agent-name
+  email = your-agent-email@example.com
 [credential]
   helper = "!f() { [ \"$1\" = \"get\" ] && git credential-store --file ~/.git-credentials \"$1\"; }; f"
 [push]

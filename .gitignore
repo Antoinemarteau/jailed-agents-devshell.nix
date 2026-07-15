@@ -2,6 +2,10 @@
 /agentshome/.direnv/
 /.hosthome/
 
+# projects are independent repos, never tracked by this template repo
+/agentshome/projects/*
+!/agentshome/projects/.gitkeep
+
 # git HTTPS credential (secret)
 /agentshome/.git-credentials
 

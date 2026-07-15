@@ -8,10 +8,9 @@
     };
     jail-nix.url = "sourcehut:~alexdavid/jail.nix";
     llm-agents.url = "github:numtide/llm-agents.nix";
-    nixconfig.url = "github:Antoinemarteau/nixconfig";
   };
 
-  outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, nixconfig, ... }:
+  outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, ... }:
   flake-utils.lib.eachDefaultSystem (system:
   let
     pkgs = import nixpkgs {
@@ -24,7 +23,7 @@
     ###########################################################################
 
     # NECESSARY TO SET to the repository root, containing the current file
-    devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
+    devshellRoot = "";
 
     # Network whitelists
     claudeAllowedDomains = [ "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com" ];
@@ -189,8 +188,6 @@
     # for safely working within projects/ and debugging other jails
     ###########################################################################
 
-    nvim-pkg = nixconfig.packages.${system}.default;
-
     # devshell-home.nix's zsh config (oh-my-zsh, aliases, history), instantiated for
     # jailed-shell: never activated — only its build-time `home-files` output is
     # consumed, ro-bound straight into the jail below.
@@ -276,7 +273,7 @@
         # jailed-shell: zsh with all dev. tools and all folders other jail have binded for debugging
         (makeJailedShell {
           extraPkgs = [
-            nvim-pkg claude-pkg julia-pkg python3 gh man gzip unzip gnutar
+            vim claude-pkg julia-pkg python3 gh man gzip unzip gnutar
           ];
         })
       ]

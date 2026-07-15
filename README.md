@@ -1,7 +1,8 @@
-# ai-agent-nix-sandboxing
+# jailed-agents-devshell.nix
 
-A reproducible agentic development environment on Linux. Currently configured to
-work on julia projects using Claude-code and Kaimon.jl.
+A reproducible Linux development environment to work with sandboxed coding
+agents, open source and vendor independent. Currently configured to work on
+Julia projects using Claude-code and Kaimon.jl.
 
 The project leverages nix, tmux and direnv to facilitate using coding agents in
 a reproducible, personalized and safer manner, on local machine or remotely via
@@ -62,11 +63,11 @@ nix profile install nixpkgs#nix-direnv
 echo 'source $HOME/.nix-profile/share/nix-direnv/direnvrc' >> ~/.config/direnv/direnvrc
 ```
 
-Clone the repository. Change the hard-coded
+Use this template (or clone the repository). Set the
 ```nix
-devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
+devshellRoot = "";
 ```
-variable in the `nix_src/flake.nix` file, to the actual absolute path of the repo.
+variable in the `nix_src/flake.nix` file to the absolute path of the cloned repo.
 
 Then enable `direnv` from within `agentshome/`
 ```bash
@@ -201,8 +202,12 @@ shadowed, and absolute paths (`/usr/bin/git`) or tools that embed git (libgit2,
 
 The tmux session layout is user-editable at
 `.hosthome/.config/tmux/default-session.conf`, and the shell/tmux/editor
-configurations of both the host panes and `jailed-shell` live in
-`nix_src/devshell-home.nix`.
+[home-manager
+configurations](https://home-manager-options.extranix.com/?query=zsh&release=release-25.11)
+of both the host panes and `jailed-shell` live in `nix_src/devshell-home.nix`.
+
+The top-level `CLAUDE.md` and `.claude/memories/` files are provided to give
+coding agents context about this template and how to personalize it.
 
 ### Creating a new sandboxed programs
 
@@ -320,4 +325,4 @@ Specific characteristics of the project:
 - not just a sandbox, also a portable and remotely-usable dev. environment,
 - this is meant to be forked and personalized to your needs, it's not a library.
 
-Written with the help of Claude code.
+Written with the invaluable help of Claude code.
