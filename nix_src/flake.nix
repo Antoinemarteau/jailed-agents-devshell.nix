@@ -244,7 +244,12 @@
             (rw-bind "${agentHomeDirectory}/.local/state" "${jailHomeDirectory}/.local/state") # zsh history
             (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
             (set-env "LANG" "C.UTF-8")
-            (set-env "TERMINFO_DIRS" "${pkgs.ncurses}/share/terminfo")
+            (add-runtime ''
+              if [ -n "''${TERMINFO-}" ] && [ -d "''${TERMINFO-}" ]; then
+                RUNTIME_ARGS+=(--ro-bind "$TERMINFO" /run/host-terminfo)
+              fi
+            '')
+            (set-env "TERMINFO_DIRS" "/run/host-terminfo:${pkgs.ncurses}/share/terminfo")
           ];
       };
 
