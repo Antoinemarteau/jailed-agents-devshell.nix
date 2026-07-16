@@ -1,4 +1,4 @@
-{ pkgs, home-manager, devshellUser, homeDirectory, forHost ? false }:
+{ pkgs, home-manager, devshellUser, homeDirectory, forHost ? false, tmuxServer ? "" }:
 
 # Shared home-manager module for the zsh config (oh-my-zsh, aliases, history),
 # instantiated twice: once for `.hosthome` (forHost = true, activated for real on
@@ -30,6 +30,25 @@ home-manager.lib.homeManagerConfiguration {
         shellAliases = {
           v   = "nvim";
           vim = "nvim";
+
+          tm   = "tmux";
+          tmd  = "tmux detach";
+          tmgl = "tmux -L ${tmuxServer} ls";
+          tmga = "tmux -L ${tmuxServer} attach -t";
+
+          g   = "git";
+          gs  = "git status";
+          gd  = "git diff";
+          gf  = "git fetch";
+
+          ju  = "julia -t auto";
+          jug = "julia -t auto -i -e \"using Gridap; " +
+            "using Gridap.Helpers;     using Gridap.Io;            using Gridap.Algebra;" +
+            "using Gridap.Arrays;      using Gridap.TensorValues;  using Gridap.Fields;" +
+            "using Gridap.Polynomials; using Gridap.ReferenceFEs;  using Gridap.Geometry;" +
+            "using Gridap.CellData;    using Gridap.Visualization; using Gridap.FESpaces;" +
+            "using Gridap.MultiField;  using Gridap.ODEs;          using Gridap.Adaptivity;" +
+            "using FillArrays;         using LinearAlgebra;\" ";
         };
 
         autosuggestion.enable = true;
@@ -141,7 +160,7 @@ home-manager.lib.homeManagerConfiguration {
           set -g status-interval 1
 
           # Create new window (in the project dir) and name it directly
-          bind C command-prompt -p "Name of new window: " "new-window -c '#{@proj}' -n '%%'"
+          bind C command-prompt -p "Name of new window: " "new-window -b -t '{end}' -c '#{@proj}' -n '%%'"
 
           # Cd to current directory when spliting window
           bind '"' split-window -v -c "#{pane_current_path}"
