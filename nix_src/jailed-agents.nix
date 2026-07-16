@@ -135,7 +135,7 @@ let
   # activated — only its build-time `home-files` output is consumed) is program-specific
   # to jailed-shell and lives in flake.nix instead.
   hostHomeManager = import ./devshell-home.nix {
-    inherit pkgs home-manager devshellUser;
+    inherit pkgs home-manager devshellUser tmuxServer;
     homeDirectory = devshellRoot + "/" + devshellHostHomeFolder;
     forHost = true;
   };
