@@ -28,8 +28,8 @@ if isinteractive()
 
         # LanguageServer.jl
         # it should be installed in special folder for neovim
-        mkpath("/home/antoine/.julia/environments/nvim-lspconfig")
-        var"#Pkg".activate("/home/antoine/.julia/environments/nvim-lspconfig")
+        mkpath(joinpath(first(DEPOT_PATH), "environments", "nvim-lspconfig"))
+        var"#Pkg".activate(joinpath(first(DEPOT_PATH), "environments", "nvim-lspconfig"))
         if isnothing(Base.find_package("LanguageServer"))
             var"#Pkg".add("LanguageServer")
         end

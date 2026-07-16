@@ -30,6 +30,7 @@ home-manager.lib.homeManagerConfiguration {
         shellAliases = {
           v   = "nvim";
           vim = "nvim";
+          vs = "nvim -c ':vert Git'";
 
           tm   = "tmux";
           tmd  = "tmux detach";
@@ -41,8 +42,8 @@ home-manager.lib.homeManagerConfiguration {
           gd  = "git diff";
           gf  = "git fetch";
 
-          ju  = "julia -t auto";
-          jug = "julia -t auto -i -e \"using Gridap; " +
+          ju  = "jailed-julia -t auto";
+          jug = "jailed-julia -t auto -i -e \"using Gridap; " +
             "using Gridap.Helpers;     using Gridap.Io;            using Gridap.Algebra;" +
             "using Gridap.Arrays;      using Gridap.TensorValues;  using Gridap.Fields;" +
             "using Gridap.Polynomials; using Gridap.ReferenceFEs;  using Gridap.Geometry;" +
