@@ -51,6 +51,14 @@ home-manager.lib.homeManagerConfiguration {
             "using Gridap.CellData;    using Gridap.Visualization; using Gridap.FESpaces;" +
             "using Gridap.MultiField;  using Gridap.ODEs;          using Gridap.Adaptivity;" +
             "using FillArrays;         using LinearAlgebra;\" ";
+          jus = "jailed-julia -t auto -i -e \"using Pkg; Pkg.activate(\"subdivision_surfaces\");" +
+            "using GridapSubdivisionSurfaces; using Gridap; " +
+            "using Gridap.Helpers;     using Gridap.Io;            using Gridap.Algebra;" +
+            "using Gridap.Arrays;      using Gridap.TensorValues;  using Gridap.Fields;" +
+            "using Gridap.Polynomials; using Gridap.ReferenceFEs;  using Gridap.Geometry;" +
+            "using Gridap.CellData;    using Gridap.Visualization; using Gridap.FESpaces;" +
+            "using Gridap.MultiField;  using Gridap.ODEs;          using Gridap.Adaptivity;" +
+            "using FillArrays;         using LinearAlgebra;\" ";
         };
 
         autosuggestion.enable = true;
