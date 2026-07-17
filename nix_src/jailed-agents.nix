@@ -47,22 +47,27 @@ let
     (try-ro-bind "${homeDirectory}/.git-credentials" "${jailHomeDirectory}/.git-credentials")
   ];
 
+  hostGetCredHelper = pkgs.writeShellScriptBin "git-credential-hostget" ''
+    [ "$1" = get ] || exit 0
+    exec ${getExe pkgs.git} credential-store --file ${jailHomeDirectory}/.git-credentials get
+  '';
+
   # Git config forced on every git run in the jail via GIT_CONFIG_* env vars
   # (command-line scope: outranks a repo-local .git/config, and is inherited by
   # git run from other tools, e.g. gh): no hooks, no fsmonitor/ssh/ext commands,
-  # and the credential-helper list is reset (empty entry) to the store on the
-  # ro-bound host credentials file (writes are refused by the mount, so get-only).
+  # and the credential-helper list is reset (empty entry) to hostGetCredHelper.
   saferHostGitConfig = [
     { key = "core.hooksPath";     value = "${pkgs.emptyDirectory}"; }
     { key = "core.fsmonitor";     value = "false"; }
     { key = "core.sshCommand";    value = "false"; }
     { key = "protocol.ext.allow"; value = "never"; }
     { key = "credential.helper";  value = ""; }
-    { key = "credential.helper";  value = "store --file ${jailHomeDirectory}/.git-credentials"; }
+    { key = "credential.helper";  value = "hostget"; }
   ];
   hostGitEnv = with jail.combinators;
     [ (set-env "GIT_CONFIG_NOSYSTEM" "1")
       (set-env "GIT_CONFIG_COUNT" (toString (builtins.length saferHostGitConfig)))
+      (add-pkg-deps [ hostGetCredHelper ])
     ] ++ pkgs.lib.concatLists (pkgs.lib.imap0 (i: c: [
       (set-env "GIT_CONFIG_KEY_${toString i}" c.key)
       (set-env "GIT_CONFIG_VALUE_${toString i}" c.value)
