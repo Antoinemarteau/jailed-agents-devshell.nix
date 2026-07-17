@@ -1,6 +1,6 @@
 [user]
-  name = your-name
-  email = your-email@example.com
+  name = Antoine Marteau
+  email = antoine.marteau@protonmail.com
 [credential]
   helper = "!f() { [ \"$1\" = \"get\" ] && git credential-store --file ~/.git-credentials \"$1\"; }; f"
 [push]
