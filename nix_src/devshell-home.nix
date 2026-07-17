@@ -41,6 +41,7 @@ home-manager.lib.homeManagerConfiguration {
           gs  = "git status";
           gd  = "git diff";
           gf  = "git fetch";
+          gk  = "git checkout";
 
           ju  = "jailed-julia -t auto";
           jug = "jailed-julia -t auto -i -e \"using Gridap; " +
