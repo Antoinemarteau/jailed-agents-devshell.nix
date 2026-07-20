@@ -216,8 +216,6 @@
     # for debugging other jails
     ###########################################################################
 
-    nvim-pkg = nixconfig.packages.${system}.default;
-
     # devshell-home.nix's zsh config (oh-my-zsh, aliases, history), instantiated for
     # the shell jails: never activated — only its build-time `home-files` output is
     # consumed, ro-bound straight into the jails below.
@@ -281,25 +279,27 @@
       (rw-bind "${hostJuliaDepot}" "${jailHomeDirectory}/.julia")
     ];
 
-    # override g:clipboard to OSC 52 so yanks reach tmux and the terminal
+    # wrap the personal flake's nvim to override g:clipboard to OSC 52 (post-init,
+    # so it beats nixvim's xclip provider) — yanks then reach tmux and the terminal
     nvim-pkg =
-      let osc52 = pkgs.writeText "osc52-clipboard.lua" ''
-        vim.opt.clipboard = 'unnamedplus'
-        local osc52 = require('vim.ui.clipboard.osc52')
-        vim.g.clipboard = {
-          name = 'OSC 52',
-          copy = {
-            ['+'] = osc52.copy('+'),
-            ['*'] = osc52.copy('*'),
-          },
-          paste = {
-            ['+'] = osc52.paste('+'),
-            ['*'] = osc52.paste('*'),
-          },
-        }
-      '';
+      let
+        personalNvim = nixconfig.packages.${system}.default;
+        osc52 = pkgs.writeText "osc52-clipboard.lua" ''
+          local osc52 = require('vim.ui.clipboard.osc52')
+          vim.g.clipboard = {
+            name = 'OSC 52',
+            copy = {
+              ['+'] = osc52.copy('+'),
+              ['*'] = osc52.copy('*'),
+            },
+            paste = {
+              ['+'] = osc52.paste('+'),
+              ['*'] = osc52.paste('*'),
+            },
+          }
+        '';
       in pkgs.writeShellScriptBin "nvim" ''
-        exec ${pkgs.lib.getExe pkgs.neovim} -c "luafile ${osc52}" "$@"
+        exec ${pkgs.lib.getExe personalNvim} -c "luafile ${osc52}" "$@"
       '';
 
     makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
@@ -381,7 +381,7 @@
         (makeJailedShell {
           extraPkgs = [ gh
             # nvim and the CLIs it expects (found via :checkhealth), julia is for language servers
-            nvim-pkg julia-pkg fd tar
+            nvim-pkg julia-pkg fd gnutar
           ];
         })
 
