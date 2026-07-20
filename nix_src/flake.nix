@@ -22,6 +22,7 @@
       inherit system;
       config.allowUnfree = true;
     };
+    inherit (pkgs.lib) getExe;
 
     ###########################################################################
     # Main flake parameters #
@@ -166,15 +167,28 @@
       (rw-bind "${agentHomeDirectory}/.julia" "${jailHomeDirectory}/.julia")
     ];
 
+    # shared dtach socket so vim-slime can push code to the REPL;
+    slimeSocket = "${jailHomeDirectory}/.cache/slime/julia.sock";
+    slimeSocketBinds = with jail.combinators; [
+      (add-runtime "mkdir -p ${agentHomeDirectory}/.cache/slime")
+      (rw-bind "${agentHomeDirectory}/.cache/slime" "${jailHomeDirectory}/.cache/slime")
+    ];
+
     # proxiedNetwork = true : empty netns, internet only via the host allowlist proxy
     #   (e.g. the Julia registries). proxiedNetwork = false: full host network.
+    # slimeSocket != null wraps the REPL in dtach -A so it can receive vim-slime's code
     makeJailedJulia = { extraPkgs ? [], name ? "jailed-julia", allowedDomains ? [],
-                        proxiedNetwork ? false }:
+                        proxiedNetwork ? false, slimeSocket ? null }:
       makeJailed {
-        inherit name extraPkgs proxiedNetwork allowedDomains;
-        exe = julia-pkg;
+        inherit name proxiedNetwork allowedDomains;
+        exe = if slimeSocket == null then julia-pkg
+              else pkgs.writeShellScriptBin "julia" ''
+                exec ${getExe pkgs.dtach} -A ${slimeSocket} ${getExe julia-pkg} -t auto "$@"
+              '';
+        extraPkgs = extraPkgs ++ [ pkgs.dtach ];
         network = !proxiedNetwork;
-        options = juliaDepotWriteBinds ++ kaimonCacheWriteBinds ++ nixLdBinds;
+        options = juliaDepotWriteBinds ++ kaimonCacheWriteBinds ++ nixLdBinds
+          ++ pkgs.lib.optionals (slimeSocket != null) slimeSocketBinds;
       };
 
 
@@ -279,8 +293,9 @@
       (rw-bind "${hostJuliaDepot}" "${jailHomeDirectory}/.julia")
     ];
 
-    # wrap the personal flake's nvim to override g:clipboard to OSC 52 (post-init,
-    # so it beats nixvim's xclip provider) — yanks then reach tmux and the terminal
+    # wrap the personal flake's nvim (post-init, so both overrides beat the imported config):
+    #  - override g:clipboard to OSC 52 so yanks reach tmux and the terminal
+    #  - route vim-slime sends to the jailed-julia REPL's dtach socket, only inside jailed-shell
     nvim-pkg =
       let
         personalNvim = nixconfig.packages.${system}.default;
@@ -298,8 +313,21 @@
             },
           }
         '';
+        slimeOverride = pkgs.writeText "slime-override.vim" ''
+          if !empty($SLIME_DTACH_SOCKET)
+            function! SlimeOverrideValidEnv() abort
+              return 1
+            endfunction
+            function! SlimeOverrideValidConfig(config, ...) abort
+              return 1
+            endfunction
+            function! SlimeOverrideSend(config, text) abort
+              call system('${pkgs.dtach}/bin/dtach -p ' . shellescape($SLIME_DTACH_SOCKET), a:text)
+            endfunction
+          endif
+        '';
       in pkgs.writeShellScriptBin "nvim" ''
-        exec ${pkgs.lib.getExe personalNvim} -c "luafile ${osc52}" "$@"
+        exec ${getExe personalNvim} -c "luafile ${osc52}" -c "source ${slimeOverride}" "$@"
       '';
 
     makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
@@ -313,13 +341,15 @@
         options = with jail.combinators;
           hostGitBinds ++
           hostJuliaDepotBind ++
-          hostGitEnv ++ [
+          hostGitEnv ++
+          slimeSocketBinds ++ [
             (ro-bind "${zshHomeFiles}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
             (ro-bind "${zshHomeFiles}/.config/starship.toml" "${jailHomeDirectory}/.config/starship.toml")
             (add-runtime "mkdir -p ${agentHomeDirectory}/.local/state")
             (rw-bind "${agentHomeDirectory}/.local/state" "${jailHomeDirectory}/.local/state")
             (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
             (set-env "LANG" "C.UTF-8")
+            (set-env "SLIME_DTACH_SOCKET" slimeSocket)
             (add-runtime ''
               if [ -n "''${TERMINFO-}" ] && [ -d "''${TERMINFO-}" ]; then
                 RUNTIME_ARGS+=(--ro-bind "$TERMINFO" /run/host-terminfo)
@@ -364,6 +394,16 @@
           allowedDomains = juliaAllowedDomains;
         })
 
+        # jailed-julia-repl: same as jailed-julia but under dtach, so vim-slime in
+        # jailed-shell can push code to it; this is what the repl tmux window launches
+        (makeJailedJulia {
+          name = "jailed-julia-repl";
+          extraPkgs = [ python3 ];
+          proxiedNetwork = true;
+          allowedDomains = juliaAllowedDomains;
+          slimeSocket = slimeSocket;
+        })
+
         # yolo-jailed-julia: julia with full network access
         (makeJailedJulia {
           name = "yolo-jailed-julia";
@@ -380,8 +420,9 @@
         # jailed-shell: minimal shell with the personal git credentials for reviewing/pushing agent work
         (makeJailedShell {
           extraPkgs = [ gh
-            # nvim and the CLIs it expects (found via :checkhealth), julia is for language servers
-            nvim-pkg julia-pkg fd gnutar
+            # nvim and the CLIs it expects (found via :checkhealth),
+            # julia is for language servers, dtach drives the jailed-julia-repl slime socket
+            nvim-pkg julia-pkg fd gnutar dtach
           ];
         })
 
