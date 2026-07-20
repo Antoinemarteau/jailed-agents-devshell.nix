@@ -231,7 +231,7 @@
       makeJailed {
         inherit name;
         exe = pkgs.zsh;
-        extraPkgs = [ pkgs.zsh pkgs.ncurses zshHomeFiles ] ++ extraPkgs;
+        extraPkgs = with pkgs; [ zsh ncurses zshHomeFiles ] ++ extraPkgs;
         network = true;
         options = with jail.combinators;
           claudeConfigWriteBinds ++
@@ -379,7 +379,10 @@
 
         # jailed-shell: minimal shell with the personal git credentials for reviewing/pushing agent work
         (makeJailedShell {
-          extraPkgs = [ nvim-pkg gh julia-pkg ];
+          extraPkgs = [ gh
+            # nvim and the CLIs it expects (found via :checkhealth), julia is for language servers
+            nvim-pkg julia-pkg fd tar
+          ];
         })
 
         # jail-debug: zsh with all dev. tools and all folders other jail have binded for debugging
