@@ -168,8 +168,8 @@ let
   # Any jail without full host network has no /etc/hosts or /etc/nsswitch.conf (the
   # `network` combinator otherwise provides them), so `localhost` won't resolve —
   # needed even by fully offline jails (e.g. Kaimon), not just restricted ones.
-  localhostResolveBinds = with jail.combinators; [
-    (write-text "/etc/hosts" "127.0.0.1 localhost\n::1 localhost\n")
+  localhostResolveBinds = extraHosts: with jail.combinators; [
+    (write-text "/etc/hosts" ("127.0.0.1 localhost\n::1 localhost\n" + extraHosts))
     (write-text "/etc/nsswitch.conf" "hosts: files dns\n")
   ];
 
@@ -375,7 +375,7 @@ let
   # `network` and `proxiedNetwork` are mutually exclusive.
   makeJailed = { name, exe, extraArgs ? "", socatLegs ? [], network ? false,
                  options ? [], extraPkgs ? [], proxiedNetwork ? false, allowedDomains ? [],
-                 trustedBindPaths ? [] }:
+                 trustedBindPaths ? [], extraHosts ? "" }:
     assert pkgs.lib.assertMsg (!(network && proxiedNetwork))
       "${name}: network and proxiedNetwork are mutually exclusive";
     assert pkgs.lib.assertMsg (proxiedNetwork || allowedDomains == [])
@@ -387,7 +387,7 @@ let
       [ (jail.combinators.add-runtime (assertInDevshell name)) ] ++
       commonJailOptions ++
       pkgs.lib.optionals network [ jail.combinators.network ] ++
-      pkgs.lib.optionals (!network) localhostResolveBinds ++
+      pkgs.lib.optionals (!network) (localhostResolveBinds extraHosts) ++
       pkgs.lib.optionals proxiedNetwork (mkRestrictedNetOptions name allowedDomains) ++
       options ++
       [ (jail.combinators.add-pkg-deps extraPkgs) ]));

@@ -110,6 +110,52 @@
       (rw-bind "${agentHomeDirectory}/.config/kaimon" "${jailHomeDirectory}/.config/kaimon")
     ];
 
+    # KaimonGate TCP bridge. The REPL serves the KaimonGate over fixed TCP ports.
+    kaimonGatePort       = 2829;  # gate ROUTER socket (eval request/reply)
+    kaimonGateStreamPort = 2830;  # gate XPUB socket   (stdout/stderr stream)
+    jailGateSock       = "${jailHomeDirectory}/.cache/kaimon/gate.sock";
+    jailGateStreamSock = "${jailHomeDirectory}/.cache/kaimon/gate-stream.sock";
+
+    gateServerLegs = [
+      "rm -f ${jailGateSock}; socat UNIX-LISTEN:${jailGateSock},fork,reuseaddr TCP:127.0.0.1:${toString kaimonGatePort} 2>/dev/null &"
+      "rm -f ${jailGateStreamSock}; socat UNIX-LISTEN:${jailGateStreamSock},fork,reuseaddr TCP:127.0.0.1:${toString kaimonGateStreamPort} 2>/dev/null &"
+    ];
+    gateClientLegs = [
+      "socat TCP-LISTEN:${toString kaimonGatePort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailGateSock} 2>/dev/null &"
+      "socat TCP-LISTEN:${toString kaimonGateStreamPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailGateStreamSock} 2>/dev/null &"
+    ];
+    # Set on the REPL so its startup.jl `KaimonGate.serve()` binds TCP (fixed ports,
+    # so the bridge can target them) instead of a discover-by-file IPC socket.
+    gateTcpEnv = with jail.combinators; [
+      (set-env "KAIMON_GATE_PORT"        (toString kaimonGatePort))
+      (set-env "KAIMON_GATE_STREAM_PORT" (toString kaimonGateStreamPort))
+    ];
+
+    # KaimonGate TCP configuration for jailed-julia-repl
+    gateAutoConnectSeed = with jail.combinators; [
+      (add-runtime ''
+        _tcp_gates="${agentHomeDirectory}/.config/kaimon/tcp_gates.json"
+        if [ ! -e "$_tcp_gates" ]; then
+          mkdir -p "$(dirname "$_tcp_gates")"
+          cat > "$_tcp_gates" <<'JSON'
+{
+  "tcp_gates": [
+    {
+      "host": "kaimon-gate",
+      "port": ${toString kaimonGatePort},
+      "name": "jailed-julia-repl",
+      "enabled": true,
+      "token": "",
+      "stream_port": 0,
+      "server_key": ""
+    }
+  ]
+}
+JSON
+        fi
+      '')
+    ];
+
     juliaDepotReadBinds = with jail.combinators; [
       (ro-bind "${agentHomeDirectory}/.julia" "${jailHomeDirectory}/.julia")
     ];
@@ -119,13 +165,17 @@
         inherit name;
         exe = "~/.julia/bin/kaimon";
         extraPkgs = [ julia-pkg ] ++ extraPkgs;
-        socatLegs = [ kaimonServerLeg ];
+        socatLegs = [ kaimonServerLeg ] ++ gateClientLegs;
         network = false;
+        # `kaimon-gate` resolves to loopback but is not the literal `localhost`/`127.*`,
+        # so Kaimon treats the bridged gate as a remote peer (see KaimonGate TCP bridge).
+        extraHosts = "127.0.0.1 kaimon-gate\n";
         options =
           juliaDepotReadBinds ++
           kaimonCacheWriteBinds ++
           kaimonBridgeBinds ++
-          kaimonConfigWriteBinds;
+          kaimonConfigWriteBinds ++
+          gateAutoConnectSeed;
       };
 
 
@@ -176,7 +226,7 @@
 
     # proxiedNetwork = true : empty netns, internet only via the host allowlist proxy
     #   (e.g. the Julia registries). proxiedNetwork = false: full host network.
-    # slimeSocket != null wraps the REPL in dtach -A so it can receive vim-slime's code
+    # slimeSocket != null wraps the REPL in dtach -A so it can receive vim-slime's code;
     makeJailedJulia = { extraPkgs ? [], name ? "jailed-julia", allowedDomains ? [],
                         proxiedNetwork ? false, slimeSocket ? null }:
       makeJailed {
@@ -187,8 +237,9 @@
               '';
         extraPkgs = extraPkgs ++ [ pkgs.dtach ];
         network = !proxiedNetwork;
+        socatLegs = pkgs.lib.optionals (slimeSocket != null) gateServerLegs;
         options = juliaDepotWriteBinds ++ kaimonCacheWriteBinds ++ nixLdBinds
-          ++ pkgs.lib.optionals (slimeSocket != null) slimeSocketBinds;
+          ++ pkgs.lib.optionals (slimeSocket != null) (slimeSocketBinds ++ gateTcpEnv);
       };
 
 
