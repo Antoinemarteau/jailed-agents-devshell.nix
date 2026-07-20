@@ -29,14 +29,15 @@ structure:
 │   │   ├── kaimon/
 │   │   └── zsh/     # sandboxed shell config
 │   └── .julia/      # agent specific julia folder
-│       └── startup.jl
+│       └── startup.jl # Installs Kaimon, TestEnv, etc.
 │
 │   # dev. environment definition and personalization
 ├── nix_src/         # nix code for the development environment
 ├── README.md
-└── .hosthome/       # out-of-sandbox shell personalization
-    └── .config/
-       └── tmux/default-session.conf # user-editable tmux session layout
+└── .hosthome/       # out-of-agent-sandboxes dev. environment
+    ├── .config/
+    │   └── tmux/default-session.conf # user-editable tmux session layout
+    └── .julia/startup.jl # IDE specific julia folder (LanguageServer etc.)
 ```
 `nix` and `direnv` are the only software needed to be pre-installed. The
 objective of this repo is that everything else is automatically installed in a
@@ -114,7 +115,7 @@ new_agent_session
 
 This creates a tmux session with 4 windows:
 - kaimon: runs sandboxed Kaimon CLI, `jailed-kaimon`
-- shell: runs a sandboxed terminal, `jailed-shell`
+- shell: runs a sandboxed terminal where you can manually dev., `jailed-shell`
 - claude: runs sandboxed claude-code CLI `jailed-claude`
 - repl: runs sandboxed Julia REPL serving Kaimon, `jailed-julia`
 

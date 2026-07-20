@@ -271,6 +271,13 @@
       (try-ro-bind "${hostHomeDir}/.git-credentials" "${jailHomeDirectory}/.git-credentials")
     ];
 
+    # A Julia depot for jailed-shell alone, so the IDE can run language servers.
+    hostJuliaDepot = "${hostHomeDir}/.julia";
+    hostJuliaDepotBind = with jail.combinators; [
+      (add-runtime "mkdir -p ${hostJuliaDepot}")
+      (rw-bind "${hostJuliaDepot}" "${jailHomeDirectory}/.julia")
+    ];
+
     # override g:clipboard to OSC 52 so yanks reach tmux and the terminal
     nvim-pkg =
       let osc52 = pkgs.writeText "osc52-clipboard.lua" ''
@@ -299,9 +306,10 @@
         extraPkgs = [ pkgs.zsh pkgs.ncurses zshHomeFiles ]
           ++ extraPkgs ++ [ saferHostGit ];
         network = true;
-        trustedBindPaths = hostGitFiles;
+        trustedBindPaths = hostGitFiles ++ [ hostJuliaDepot ];
         options = with jail.combinators;
           hostGitBinds ++
+          hostJuliaDepotBind ++
           hostGitEnv ++ [
             (ro-bind "${zshHomeFiles}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
             (ro-bind "${zshHomeFiles}/.config/starship.toml" "${jailHomeDirectory}/.config/starship.toml")
@@ -368,7 +376,7 @@
 
         # jailed-shell: minimal shell with the personal git credentials for reviewing/pushing agent work
         (makeJailedShell {
-          extraPkgs = [ nvim-pkg gh ];
+          extraPkgs = [ nvim-pkg gh julia-pkg ];
         })
 
         # jail-debug: zsh with all dev. tools and all folders other jail have binded for debugging
