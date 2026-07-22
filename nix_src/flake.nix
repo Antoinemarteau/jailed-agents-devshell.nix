@@ -449,7 +449,7 @@ JSON
         # jailed-shell can push code to it; this is what the repl tmux window launches
         (makeJailedJulia {
           name = "jailed-julia-repl";
-          extraPkgs = [ python3 ];
+          extraPkgs = [ python3 nvim-pkg ];
           proxiedNetwork = true;
           allowedDomains = juliaAllowedDomains;
           slimeSocket = slimeSocket;
