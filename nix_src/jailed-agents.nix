@@ -163,7 +163,7 @@ let
 
   # In-jail socat legs (for a jail's launcher).
   # Client legs listen on 127.0.0.1 and forward to a bound unix socket.
-  proxyClientLeg = "socat TCP-LISTEN:${toString proxyPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${jailProxySock} 2>/dev/null &";
+  proxyClientLeg = "socat TCP-LISTEN:${toString proxyPort},bind=127.0.0.1,nodelay,fork,reuseaddr UNIX-CONNECT:${jailProxySock} 2>/dev/null &";
 
   # Any jail without full host network has no /etc/hosts or /etc/nsswitch.conf (the
   # `network` combinator otherwise provides them), so `localhost` won't resolve —
@@ -236,7 +236,7 @@ let
   mkProxyConf = name: domains: pkgs.writeText "${name}-tinyproxy.conf" ''
     Port ${toString proxyPort}
     Listen 127.0.0.1
-    Timeout 600
+    Timeout 86400 # long timout since Claude sometimes re-uses tunnel openned long ago (e.g., long time between calling advisor).
     MaxClients 100
     LogLevel Notice
     FilterDefaultDeny Yes
