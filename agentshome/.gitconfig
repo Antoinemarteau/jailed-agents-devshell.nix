@@ -5,3 +5,5 @@
   helper = "!f() { [ \"$1\" = \"get\" ] && git credential-store --file ~/.git-credentials \"$1\"; }; f"
 [push]
   autoSetupRemote = true
+[core]
+  editor = nvim
