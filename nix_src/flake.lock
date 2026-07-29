@@ -304,7 +304,8 @@
         "julia-mcp": "julia-mcp",
         "llm-agents": "llm-agents",
         "nixconfig": "nixconfig",
-        "nixpkgs": "nixpkgs_4"
+        "nixpkgs": "nixpkgs_4",
+        "typst-mcp": "typst-mcp"
       }
     },
     "scientific-fhs": {
@@ -409,6 +410,22 @@
       "original": {
         "owner": "numtide",
         "repo": "treefmt-nix",
+        "type": "github"
+      }
+    },
+    "typst-mcp": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776495034,
+        "narHash": "sha256-9hvPdQZfYlHyJS8ACLnPG1n5Yxf6+tv6L0RokVVMXKY=",
+        "owner": "johannesbrandenburger",
+        "repo": "typst-mcp",
+        "rev": "c9a1d897712540db5d7a4147f0d648504b4fc246",
+        "type": "github"
+      },
+      "original": {
+        "owner": "johannesbrandenburger",
+        "repo": "typst-mcp",
         "type": "github"
       }
     }

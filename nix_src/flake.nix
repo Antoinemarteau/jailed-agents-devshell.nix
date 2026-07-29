@@ -12,10 +12,14 @@
       url = "github:aplavin/julia-mcp";
       flake = false;
     };
+    typst-mcp = {
+      url = "github:johannesbrandenburger/typst-mcp";
+      flake = false;
+    };
     nixconfig.url = "github:Antoinemarteau/nixconfig";
   };
 
-  outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, julia-mcp, nixconfig, ... }:
+  outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, julia-mcp, typst-mcp, nixconfig, ... }:
   flake-utils.lib.eachDefaultSystem (system:
   let
     pkgs = import nixpkgs {
@@ -34,6 +38,7 @@
     # Network whitelists
     claudeAllowedDomains = [ "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com" ];
     juliaAllowedDomains  = [ "julialang.org" "julialang.net" "github.com" "githubusercontent.com" ];
+    typstAllowedDomains  = [ "typst.app" "github.com" "githubusercontent.com" ];
 
     guardedHostTools = [
       "git" "gh" "julia" "claude" "kaimon"          # the sandboxed workflow's tools
@@ -49,6 +54,7 @@
       "${devshellRoot}/nix_src"        # this flake: defines the jails themselves
       "${devshellRoot}/.git"           # repo hooks/config run by host git
       "${agentHomeDirectory}/.cache/julia-mcp-sock"  # per-instance julia-mcp listener sockets
+      "${agentHomeDirectory}/.cache/typst-mcp-sock"  # per-instance typst-mcp listener sockets
     ];
 
 
@@ -203,7 +209,7 @@ JSON
         exe = claude-pkg;
         socatLegs = [ kaimonClientLeg ];
         network = !proxiedNetwork;
-        options = claudeConfigWriteBinds ++ gitReadBinds ++ kaimonBridgeBinds ++ juliaMcpServerSocketOptions;
+        options = claudeConfigWriteBinds ++ gitReadBinds ++ kaimonBridgeBinds ++ juliaMcpServerSocketOptions ++ typstMcpServerSocketOptions;
       };
 
 
@@ -274,6 +280,34 @@ JSON
     # .cache/julia-mcp-sock dir itself (cf. forbiddenBindPaths).
     juliaMcpServerSocketOptions =
       mkServerSocketOptions "julia-mcp" jailedJuliaMcp jailJuliaMcpSock;
+
+
+    ###########################################################################
+    # jailed-typst-mcp
+    # typst-mcp MCP server in its own jail, launched by Claude on demand.
+    ###########################################################################
+
+    jailTypstMcpSock = "${jailHomeDirectory}/.cache/typst-mcp-sock/mcp.sock";
+
+    makeJailedTypstMcp = { extraPkgs ? [], name ? "jailed-typst-mcp", allowedDomains ? [],
+                           proxiedNetwork ? false }:
+      makeJailed {
+        inherit name allowedDomains proxiedNetwork;
+        exe = pkgs.writeShellScriptBin "typst-mcp-server" ''
+          exec python3 -u ${typst-mcp}/server.py "$@"
+        '';
+        extraPkgs = [ pkgs.typst (pkgs.python3.withPackages (ps: [ ps.mcp ps.numpy ps.pillow ])) ] ++ extraPkgs;
+        network = !proxiedNetwork;
+        options = [];
+      };
+
+    jailedTypstMcp = makeJailedTypstMcp {
+      proxiedNetwork = true;
+      allowedDomains = typstAllowedDomains;
+    };
+
+    typstMcpServerSocketOptions =
+      mkServerSocketOptions "typst-mcp" jailedTypstMcp jailTypstMcpSock;
 
 
     ###########################################################################
@@ -420,6 +454,7 @@ JSON
         attachAgentSession
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
       (writeShellScriptBin "claude-connect-julia-mcp" ''exec jailed-claude mcp add --scope user julia -- socat - UNIX-CONNECT:${jailJuliaMcpSock}'')
+      (writeShellScriptBin "claude-connect-typst-mcp" ''exec jailed-claude mcp add --scope user typst -- socat - UNIX-CONNECT:${jailTypstMcpSock}'')
 
         # jailed-claude: claude-code with skip permission and restricted network
         (makeJailedClaude {
@@ -467,6 +502,9 @@ JSON
         # jailed-julia-mcp: julia-mcp MCP server, egress restricted to the Julia
         # registries; spawned by the claude jails on demand, exposed for debugging
         jailedJuliaMcp
+
+        # jailed-typst-mcp: typst-mcp MCP server, egress restricted to typst.app and github
+        jailedTypstMcp
 
         # jailed-shell: minimal shell with the personal git credentials for reviewing/pushing agent work
         (makeJailedShell {
