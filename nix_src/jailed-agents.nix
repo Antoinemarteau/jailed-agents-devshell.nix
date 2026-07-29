@@ -29,6 +29,8 @@ let
     ps              # required by Kaimon
     findutils
     diffutils
+
+    typst
   ];
 
   commonJailOptions = with jail.combinators; [
