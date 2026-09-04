@@ -37,6 +37,8 @@
     ],
     "defaultMode": "default"
   },
+  "model": "opus",
+  "advisorModel": "opus",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark"
 }
