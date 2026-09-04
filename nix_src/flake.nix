@@ -416,12 +416,13 @@ JSON
         extraPkgs = [ pkgs.zsh pkgs.ncurses zshHomeFiles ]
           ++ extraPkgs ++ [ saferHostGit ];
         network = true;
-        trustedBindPaths = hostGitFiles ++ [ hostJuliaDepot ];
+        trustedBindPaths = hostGitFiles ++ [ hostJuliaDepot "/tmp/.X11-unix" ];
         options = with jail.combinators;
           hostGitBinds ++
           hostJuliaDepotBind ++
           hostGitEnv ++
-          slimeSocketBinds ++ [
+          slimeSocketBinds ++
+          [ unsafe-x11 ] ++ [
             (ro-bind "${zshHomeFiles}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
             (ro-bind "${zshHomeFiles}/.config/starship.toml" "${jailHomeDirectory}/.config/starship.toml")
             (add-runtime "mkdir -p ${agentHomeDirectory}/.local/state")
@@ -435,6 +436,13 @@ JSON
               fi
             '')
             (set-env "TERMINFO_DIRS" "/run/host-terminfo:${pkgs.ncurses}/share/terminfo")
+            (add-runtime ''
+              if [ -n "''${XAUTHORITY-}" ] && [ -f "''${XAUTHORITY-}" ] && command -v xauth >/dev/null 2>&1; then
+                JAIL_XAUTH=$(mktemp /tmp/.jail-xauth-XXXXXX)
+                xauth -f "''${XAUTHORITY}" nlist "''${DISPLAY:-:0}" | sed 's/^..../ffff/' | xauth -f "$JAIL_XAUTH" nmerge -
+                RUNTIME_ARGS+=(--ro-bind "$JAIL_XAUTH" /tmp/.xauthority --setenv XAUTHORITY /tmp/.xauthority)
+              fi
+            '')
           ];
       };
 
@@ -506,6 +514,7 @@ JSON
             # nvim and the CLIs it expects (found via :checkhealth),
             # julia is for language servers, dtach drives the jailed-julia-repl slime socket
             nvim-pkg julia-pkg fd gnutar dtach
+            pkgs.gitFull  # provides gitk
           ];
         })
 
