@@ -7,6 +7,7 @@
   "created_at": 1783563683,
   "editor": "nvim",
   "gate_setup_version": 1,
+  "gate_upgrade_dismissed_version": "1.2.0",
   "mode": "lax",
   "personality": "dragon",
   "port": 2828
