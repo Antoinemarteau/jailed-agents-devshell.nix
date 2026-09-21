@@ -35,10 +35,11 @@
       "Bash(git commit:*)",
       "Bash(git push:*)"
     ],
-    "defaultMode": "default"
+    "defaultMode": "auto"
   },
-  "model": "opus",
   "advisorModel": "opus",
   "skipDangerousModePermissionPrompt": true,
-  "theme": "dark"
+  "theme": "dark",
+  "autoCompactEnabled": false,
+  "model": "opus"
 }
