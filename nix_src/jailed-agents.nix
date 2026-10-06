@@ -10,8 +10,8 @@ let
 
   # tmux server name
   tmuxServer = "julia_agents";
-  # user-editable window layout
-  tmuxSessionFile = "${devshellRoot}/${devshellHostHomeFolder}/.config/tmux/default-session.conf";
+  # user-editable window layouts
+  tmuxLayoutDir = "${devshellRoot}/${devshellHostHomeFolder}/.config/tmux";
 
   commonJailPkgs = with pkgs; [
     bashInteractive
@@ -398,7 +398,9 @@ let
   # Launch (or reset) a tmux development session for the current project.
   # Entering the devShell (via direnv or `nix develop`) only puts the tools
   # on PATH — running this builds and attaches the session.
-  newAgentSession = pkgs.writeShellScriptBin "new_agent_session" ''
+  # `layout` is the layout file name in tmuxLayoutDir, `requiredTool` a jailed tool
+  # that must be on PATH for that layout.
+  mkSessionLauncher = { name, layout, requiredTool }: pkgs.writeShellScriptBin name ''
     # Require running from within the projects dir, where the jailed agents operate.
     _projects="${devshellRoot}/${devshellProjectsFolder}"
     if [ ! -d "$_projects" ]; then
@@ -411,7 +413,7 @@ let
     case "$_cwd/" in
       "$(realpath "$_projects")/"*) ;;
       *)
-        echo "ERROR: new_agent_session must be run from within $_projects" >&2
+        echo "ERROR: ${name} must be run from within $_projects" >&2
         echo "  current: $_cwd" >&2
         exit 1
         ;;
@@ -420,7 +422,7 @@ let
     _session="''${_session//[^a-zA-Z0-9_-]/_}"
 
     # The session windows launch jailed agents from PATH; ensure the devShell env is loaded.
-    if ! command -v jailed-kaimon >/dev/null 2>&1; then
+    if ! command -v ${requiredTool} >/dev/null 2>&1; then
       echo "ERROR: devShell tools not on PATH — enter the env first (direnv, or 'nix develop ${devshellRoot}/nix_src')" >&2
       exit 1
     fi
@@ -437,7 +439,7 @@ let
 
     # Create or reset the tmux session, then apply the user-editable window
     # layout. @proj is the project dir.
-    _layout="${tmuxSessionFile}"
+    _layout="${tmuxLayoutDir}/${layout}"
     if [ ! -f "$_layout" ]; then
       echo "ERROR: tmux session file not found: $_layout" >&2
       exit 1
@@ -448,6 +450,21 @@ let
     tmux -L ${tmuxServer} source-file -t "$_session:" "$_layout"
     tmux -L ${tmuxServer} attach-session -t "$_session"
   '';
+
+  # Full session: Kaimon CLI + Julia REPL serving Kaimon.
+  newKaimonSession = mkSessionLauncher {
+    name = "new_kaimon_session";
+    layout = "default-session.conf";
+    requiredTool = "jailed-kaimon";
+  };
+
+  # Kaimon-free session (no Kaimon CLI, plain jailed-julia instead of the Kaimon
+  # REPL), so several can run concurrently without sharing Kaimon state.
+  newTmuxSession = mkSessionLauncher {
+    name = "new_tmux_session";
+    layout = "tmux-session.conf";
+    requiredTool = "jailed-julia";
+  };
 
   attachAgentSession = pkgs.writeShellScriptBin "attach_agent_session" ''
     _session="$(basename "$(pwd -P)")"
@@ -460,7 +477,7 @@ let
     fi
 
     if ! tmux -L ${tmuxServer} has-session -t "=$_session" 2>/dev/null; then
-      echo "ERROR: no tmux session '$_session' for this folder — start one with new_agent_session" >&2
+      echo "ERROR: no tmux session '$_session' for this folder — start one with new_kaimon_session or new_tmux_session" >&2
       exit 1
     fi
     tmux -L ${tmuxServer} attach-session -t "=$_session"
@@ -492,5 +509,5 @@ let
 
 in {
   inherit makeJailed mkServerSocketOptions gitReadBinds nixLdBinds hostGitEnv saferHostGit
-          hostHomeManager newAgentSession attachAgentSession guardHostTool;
+          hostHomeManager newKaimonSession newTmuxSession attachAgentSession guardHostTool;
 }

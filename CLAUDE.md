@@ -17,10 +17,10 @@ evaluation and by launching a session (see Commands).
   subdirectory, not the repo root):
   - `flake.nix` — the `devShell`. The `let` block holds the config vars; **`devshellRoot`
     must be set to the absolute path of the repo checkout** (edited per clone; a trailing
-    slash is tolerated). Assembles the jailed-agent launchers and the `new_agent_session`
+    slash is tolerated). Assembles the jailed-agent launchers and the `new_kaimon_session`
     launcher into the shell's `packages`.
   - `jailed-agents.nix` — the generic sandbox machinery (see Architecture): `makeJailed`,
-    common binds, the network-allowlist proxy plumbing, `new_agent_session` /
+    common binds, the network-allowlist proxy plumbing, `new_kaimon_session` /
     `attach_agent_session`, and the host home-manager instantiation.
   - `devshell-home.nix` — a home-manager config (tmux, zsh, julia) activated into
     `.hosthome/` — the **host** interactive `$HOME`, never bound into the jails.
@@ -32,7 +32,7 @@ evaluation and by launching a session (see Commands).
   `.config/kaimon/`, `.julia/`, `.cache/kaimon/`), the `.envrc` direnv loader (see Commands),
   and `projects/`. Mostly git-ignored.
 - `agentshome/projects/` — where actual dev projects live. Jailed agents and
-  `new_agent_session` **refuse to run outside it**.
+  `new_kaimon_session` **refuse to run outside it**.
 - `DEVNOTES.ms` — sops/age recipe for encrypting the agent's Claude credentials so they can
   be committed. `kaimon.md` — how to wire Claude Code to a Kaimon.jl MCP server.
 - `.claude/memories/` — knowledge accumulated by past Claude Code sessions on this repo
@@ -52,7 +52,7 @@ nix develop ./nix_src
 Start (or reset) a tmux dev session — the single explicit entry point, run from within a
 project under `agentshome/projects/`:
 ```bash
-new_agent_session
+new_kaimon_session
 ```
 
 Tools available on `PATH` inside the env:
@@ -70,7 +70,7 @@ tmux is provided by the devShell (on `PATH`, not the host) and uses a dedicated 
 (the host tmux config is deliberately overridden). Prefix is `C-t`.
 ```bash
 tmux -L julia_agents ls                 # list live sessions
-tmux -L julia_agents attach -t <name>   # re-attach (do NOT re-run new_agent_session — it resets)
+tmux -L julia_agents attach -t <name>   # re-attach (do NOT re-run new_kaimon_session — it resets)
 ```
 
 Verify a flake change evaluates (fast, catches Nix errors without a full build):
@@ -82,7 +82,7 @@ nix eval --raw .#devShells.x86_64-linux.default.drvPath
 ## Architecture
 
 **Entry model.** Loading the devShell (direnv or `nix develop`) only exposes executables.
-`new_agent_session` is the explicit launcher: it validates the cwd is under `agentshome/projects/`,
+`new_kaimon_session` is the explicit launcher: it validates the cwd is under `agentshome/projects/`,
 checks the tools are on `PATH`, activates the home-manager config into
 `.hosthome/`, then builds and attaches the tmux session. Nothing auto-launches — the
 `shellHook` is intentionally empty so direnv can load the env on every `cd` without side
@@ -100,7 +100,7 @@ starts just before bwrap and is killed when the jail exits. `jailed-agents.nix` 
 `mkServerSocketOptions` (options letting a jail spawn a jailed server on demand through a
 socket — an idle host-side `socat` listener spawns one fresh server per connection, with
 only the socket file bound into the jail), `localhostResolveBinds`, common binds
-(`gitReadBinds`, `nixLdBinds`), and `new_agent_session`/`attach_agent_session`. `flake.nix`
+(`gitReadBinds`, `nixLdBinds`), and `new_kaimon_session`/`attach_agent_session`. `flake.nix`
 owns everything program-specific: the `makeJailedClaude/Shell/Julia/Kaimon/JuliaMcp`
 constructors (each a thin call into `makeJailed` setting `exe`, `network`, `proxiedNetwork`,
 and `options`), their bind sets (`claudeConfigWriteBinds`, `juliaDepotWriteBinds`,
@@ -127,7 +127,7 @@ writable tmpfs.
 
 **tmux session layout.** The window layout is native tmux syntax in
 `.hosthome/.config/tmux/default-session.conf`, read at runtime (edits apply on the next
-`new_agent_session`, no rebuild). It is applied with `source-file -t "$session:"` so all
+`new_kaimon_session`, no rebuild). It is applied with `source-file -t "$session:"` so all
 commands target the right session on the shared `-L julia_agents` server; the project
 directory is passed in as the `@proj` tmux user option and referenced as
 `new-window -c "#{@proj}"` (a bare `new-window` would inherit the server's launch dir, not

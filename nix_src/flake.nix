@@ -81,7 +81,7 @@
     };
     inherit (jailedAgents)
       makeJailed mkServerSocketOptions gitReadBinds nixLdBinds hostGitEnv saferHostGit
-      hostHomeManager newAgentSession attachAgentSession guardHostTool;
+      hostHomeManager newKaimonSession newTmuxSession attachAgentSession guardHostTool;
 
     tmux-pkg = hostHomeManager.config.programs.tmux.package;
 
@@ -452,7 +452,8 @@ JSON
       packages = with pkgs; [
 
         tmux-pkg zsh
-        newAgentSession
+        newKaimonSession
+        newTmuxSession
         attachAgentSession
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
       (writeShellScriptBin "claude-connect-julia-mcp" ''exec jailed-claude mcp add --scope user julia -- socat - UNIX-CONNECT:${jailJuliaMcpSock}'')

@@ -24,7 +24,7 @@ nix_src/              — the flake (NOT the repo root); untainted, host tools h
   jailed-agents.nix   — generic: makeJailed, mkLauncher, network-allowlist proxy plumbing
                         (tinyproxy launcher, restrictedNetOptions, localhostResolveBinds),
                         common binds (gitReadBinds, nixLdBinds), guardHostTool,
-                        new_agent_session/attach_agent_session, host home-manager
+                        new_kaimon_session/attach_agent_session, host home-manager
                         instantiation (hostHomeManager)
 agentshome/           — SINGLE agent-tainted root; also the fake $HOME
   .envrc              — direnv loader (uses ../nix_src)
@@ -97,7 +97,7 @@ the CLIENT that issues the command** (the terminal you're attached from when you
 key), NOT the server-start env and NOT the current pane's live env. So with two parallel
 checkouts, a `prefix+C` window created from a shell that has the *other* checkout's devShell
 on PATH runs that checkout's `jailed-*` (whose baked `devshellRoot` then fails
-`assertInDevshell`). The layout's repl pane is fine because `new_agent_session` (correct env)
+`assertInDevshell`). The layout's repl pane is fine because `new_kaimon_session` (correct env)
 created it.
 
 Fix applied: `programs.direnv` (+`nix-direnv`) enabled in `devshell-home.nix` so each pane

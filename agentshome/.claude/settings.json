@@ -37,6 +37,7 @@
     ],
     "defaultMode": "auto"
   },
+  "worktree": {"bgIsolation": "none"},
   "advisorModel": "opus",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",

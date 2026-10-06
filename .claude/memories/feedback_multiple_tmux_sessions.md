@@ -1,12 +1,12 @@
 ---
 name: feedback_multiple_tmux_sessions
-description: Support multiple concurrent tmux sessions — new_agent_session must not kill-server
+description: Support multiple concurrent tmux sessions — new_kaimon_session must not kill-server
 metadata: 
   node_type: memory
   type: feedback
 ---
 
-`new_agent_session` must reset only the same-named session (`kill-session -t
+`new_kaimon_session` must reset only the same-named session (`kill-session -t
 "=$_session"`), never `kill-server` on the `julia_agents` socket. The user runs
 several project sessions concurrently on that shared server.
 

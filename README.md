@@ -105,12 +105,12 @@ cd agentshome/projects/my_project
 
 Then, from the project folder, start (or restart) the `tmux` development session
 ```bash
-new_agent_session
+new_kaimon_session
 ```
 On a host without `direnv`, load the environment first and then launch a session
 ```bash
 nix develop <devshellRoot>/nix_src
-new_agent_session
+new_kaimon_session
 ```
 
 This creates a tmux session with 4 windows:
@@ -118,6 +118,8 @@ This creates a tmux session with 4 windows:
 - shell: runs a sandboxed terminal where you can manually dev., `jailed-shell`
 - claude: runs sandboxed claude-code CLI `jailed-claude`
 - repl: runs sandboxed Julia REPL serving Kaimon, `jailed-julia`
+
+`new_tmux_session` is also available: a Kaimon-free 3-window session (claude, shell, julia) that can run concurrently with others.
 
 On the first session you ever create, `agentshome/.julia/` and other configs are empty, so you need to:
 - Go to the repl window and wait for the Kaimon install to finish,
@@ -128,7 +130,7 @@ On the first session you ever create, `agentshome/.julia/` and other configs are
 Claude should then be ready to pass use MCP tools. Claude's login info are
 stored in `agentshome/.claude/.credentials.json`.
 
-To return to the development session later, do not re-run `new_agent_session`
+To return to the development session later, do not re-run `new_kaimon_session`
 (it kills and recreates the session and all existing agents), but
 ```bash
 attach_agent_session
@@ -140,7 +142,7 @@ Or, manually
 tmux -L julia_agents ls # see live sessions
 tmux -L julia_agents attach -t <session>
 ```
-The session is named after the folder `new_agent_session` was run from.\
+The session is named after the folder `new_kaimon_session` was run from.\
 The non-default tmux socket `julia_agents` is used because the host tmux config
 is overwritten with one provided from nix, for use on remote machine.
 
@@ -269,7 +271,7 @@ using [tinyproxy](https://github.com/tinyproxy/tinyproxy) and
 The development environment itself is the `devShell` defined in
 `nix_src/flake.nix`. This development "shell" is activated by `direnv` within
 `agentshome/` once allowed by `direnv allow`. This `devShell` puts the
-`jailed-*` tools, `new_agent_session` and `attach_agent_session` on `PATH`.
+`jailed-*` tools, `new_kaimon_session` and `attach_agent_session` on `PATH`.
 The `jailed-*` tools can be used outside of a tmux session.
 
 ### Security model
